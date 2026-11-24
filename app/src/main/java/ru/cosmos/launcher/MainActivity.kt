@@ -32,10 +32,11 @@ class MainActivity : Activity() {
         var y: Float = 0f,
         var vx: Float = 0f,
         var vy: Float = 0f,
-        var page: Int = 0
+        var page: Int = 0,
+        var folderName: String = "Папка"
     ) {
         val isFolder: Boolean get() = apps.size > 1
-        val radius: Float get() = 29f
+        val radius: Float get() = if (isFolder) 37f else 29f
     }
 
     private inner class CosmosField : View(this) {
@@ -51,6 +52,7 @@ class MainActivity : Activity() {
         private var folderDownOffset = 0f
         private var folderTouchMoved = false
         private var folderTouchIndex = -1
+        private var folderHeaderTapped = false
         private var previousFrame = 0L
         private var selected: Orb? = null
         private var downX = 0f
@@ -230,7 +232,7 @@ class MainActivity : Activity() {
             c.drawCircle(orb.x, orb.y, r - .7f*d, paint)
             paint.style = Paint.Style.FILL
 
-            val label = if (orb.isFolder) "Папка" else orb.apps.first().title
+            val label = if (orb.isFolder) orb.folderName else orb.apps.first().title
             paint.color = Color.WHITE
             paint.textAlign = Paint.Align.CENTER
             paint.typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
@@ -370,7 +372,12 @@ class MainActivity : Activity() {
             paint.color = Color.WHITE
             paint.textAlign = Paint.Align.CENTER
             paint.textSize = 19f*d
-            c.drawText("Папка", width/2f, box.top+36f*d, paint)
+            c.drawText(folder.folderName, width/2f, box.top+36f*d, paint)
+            paint.textAlign=Paint.Align.RIGHT
+            paint.textSize=12f*d
+            paint.color=Color.argb(210,190,215,255)
+            c.drawText("✎",box.right-18f*d,box.top+35f*d,paint)
+            paint.textAlign=Paint.Align.CENTER
             val cellW = (box.width()-28f*d)/3f
             val contentClip = c.save()
             c.clipRect(box.left+8f*d, box.top+62f*d, box.right-8f*d, box.bottom-34f*d)
@@ -438,6 +445,39 @@ class MainActivity : Activity() {
             packageManager.getLaunchIntentForPackage(app.packageName)?.let { startActivity(it) }
         }
 
+        private fun renameFolder(folder: Orb) {
+            val input = EditText(this@MainActivity).apply {
+                setText(folder.folderName)
+                hint = "Название папки"
+                singleLine = true
+                textSize = 16f
+                setPadding((16f*d).toInt(), (12f*d).toInt(), (16f*d).toInt(), (12f*d).toInt())
+            }
+            val dialog = AlertDialog.Builder(this@MainActivity)
+                .setTitle("Название папки")
+                .setView(input)
+                .setNegativeButton("Отмена", null)
+                .setPositiveButton("Сохранить", null)
+                .create()
+            dialog.show()
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val name = input.text.toString().trim()
+                if (name.isEmpty()) {
+                    input.error = "Введите название"
+                } else {
+                    folder.folderName = name.take(24)
+                    saveLayout()
+                    dialog.dismiss()
+                    invalidate()
+                }
+            }
+            dialog.window?.setSoftInputMode(
+                WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE or
+                    WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+            )
+            input.requestFocus()
+        }
+
         private fun openGoogleSearch() {
             val input = EditText(this@MainActivity).apply {
                 hint = "Что ищем в Google?"
@@ -496,10 +536,11 @@ class MainActivity : Activity() {
                         folderDownY=e.y
                         folderDownOffset=folderScrollOffset
                         folderTouchMoved=false
+                        folderHeaderTapped = e.y < box.top + 62f*d
                         val cellW=(box.width()-28f*d)/3f
                         val col=((e.x-box.left-14f*d)/cellW).toInt()
                         val row=((e.y-box.top-55f*d+folderScrollOffset)/(91f*d)).toInt()
-                        folderTouchIndex=if (col in 0..2 && row>=0) row*3+col else -1
+                        folderTouchIndex=if (!folderHeaderTapped && col in 0..2 && row>=0) row*3+col else -1
                         return true
                     }
                     if (e.y in 20f*d..68f*d && e.x in 22f*d..(width-22f*d)) {
@@ -575,10 +616,14 @@ class MainActivity : Activity() {
                 MotionEvent.ACTION_UP -> {
                     touchHandler.removeCallbacks(longPressAction)
                     if (openedFolder != null) {
-                        if (!folderTouchMoved && folderTouchIndex in openedFolder!!.apps.indices) {
-                            launch(openedFolder!!.apps[folderTouchIndex])
+                        val folder = openedFolder!!
+                        if (!folderTouchMoved && folderHeaderTapped) {
+                            renameFolder(folder)
+                        } else if (!folderTouchMoved && folderTouchIndex in folder.apps.indices) {
+                            launch(folder.apps[folderTouchIndex])
                         }
                         folderTouchIndex=-1
+                        folderHeaderTapped=false
                         invalidate()
                         return true
                     }
@@ -641,6 +686,7 @@ class MainActivity : Activity() {
                 val members=JSONArray()
                 orb.apps.forEach { members.put(it.packageName) }
                 item.put("apps",members)
+                item.put("folderName", orb.folderName)
                 item.put("x",if(width>0) orb.x/width else 0.5f)
                 item.put("y",if(height>0) orb.y/height else 0.3f)
                 item.put("page",orb.page)
@@ -671,8 +717,13 @@ class MainActivity : Activity() {
                             byPackage[packageName]?.let(entries::add)
                         }
                     }
-                    if (entries.isNotEmpty()) restored += Orb(entries, item.optDouble("x",.5).toFloat()*width,
-                        item.optDouble("y",.3).toFloat()*height, page=item.optInt("page",0).coerceIn(0,2))
+                    if (entries.isNotEmpty()) restored += Orb(
+                        entries,
+                        item.optDouble("x",.5).toFloat()*width,
+                        item.optDouble("y",.3).toFloat()*height,
+                        page=item.optInt("page",0).coerceIn(0,2),
+                        folderName=item.optString("folderName","Папка")
+                    )
                 }
                 // An explicitly saved empty array means the user removed every desktop orb.
                 // Restore it as empty instead of recreating the default app layout.
