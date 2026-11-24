@@ -495,12 +495,12 @@ class MainActivity : Activity() {
         override fun onDraw(canvas: Canvas) {
             canvas.drawColor(Color.rgb(5, 9, 27))
             drawStars(canvas)
+            syncMeteoredWidgetView()
             if (openedFolder != null) {
                 drawOpenFolder(canvas, openedFolder!!)
             } else {
                 drawSearchBar(canvas)
                 if (currentPage == 2) drawWeatherWidget(canvas)
-                syncMeteoredWidgetView()
                 val now = System.nanoTime()
                 val dt = if (previousFrame == 0L) .016f else ((now - previousFrame) / 1e9f).coerceIn(0f, .03f)
                 previousFrame = now
