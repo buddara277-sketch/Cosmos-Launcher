@@ -51,6 +51,7 @@ class MainActivity : Activity() {
         private var moved = false
         private var dragging = false
         private var longPressTriggered = false
+        private var edgeSwitchArmed = true
         private val touchHandler = Handler(Looper.getMainLooper())
         private var dragOffsetX = 0f
         private var dragOffsetY = 0f
@@ -370,7 +371,7 @@ class MainActivity : Activity() {
             when (e.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     downX=e.x; downY=e.y; lastX=e.x; lastY=e.y
-                    moved=false; dragging=false; longPressTriggered=false; swipeHandled=false
+                    moved=false; dragging=false; longPressTriggered=false; edgeSwitchArmed=true; swipeHandled=false
                     touchHandler.removeCallbacks(longPressAction)
                     if (openedFolder != null) {
                         val folder=openedFolder!!
@@ -411,12 +412,15 @@ class MainActivity : Activity() {
                             orb.y=e.y+dragOffsetY
                             orb.vx=0f; orb.vy=0f
                             // Dragging through a screen edge carries the orb to the adjacent desktop.
-                            if (e.x < edgeSwitchZone && currentPage > 0 && orb.page == currentPage) {
+                            if (e.x > edgeSwitchZone*2f && e.x < width-edgeSwitchZone*2f) edgeSwitchArmed=true
+                            if (edgeSwitchArmed && e.x < edgeSwitchZone && currentPage > 0 && orb.page == currentPage) {
+                                edgeSwitchArmed=false
                                 currentPage--
                                 orb.page=currentPage
                                 orb.x=width-orb.radius*d-edgeSwitchZone
                                 getSharedPreferences("cosmos_launcher", MODE_PRIVATE).edit().putInt("current_page",currentPage).apply()
-                            } else if (e.x > width-edgeSwitchZone && currentPage < 2 && orb.page == currentPage) {
+                            } else if (edgeSwitchArmed && e.x > width-edgeSwitchZone && currentPage < 2 && orb.page == currentPage) {
+                                edgeSwitchArmed=false
                                 currentPage++
                                 orb.page=currentPage
                                 orb.x=orb.radius*d+edgeSwitchZone
