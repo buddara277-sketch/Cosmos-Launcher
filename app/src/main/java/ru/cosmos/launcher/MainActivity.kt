@@ -25,7 +25,7 @@ class MainActivity : Activity() {
         setContentView(CosmosField())
     }
 
-    private data class AppEntry(val title: String, val packageName: String, val icon: Bitmap)
+    private data class AppEntry(val title: String, val packageName: String, val icon: Bitmap, val launchUrl: String? = null)
     private data class Orb(
         val apps: MutableList<AppEntry>,
         var x: Float = 0f,
@@ -87,27 +87,61 @@ class MainActivity : Activity() {
 
         private fun loadApps() {
             val query = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-            val apps = packageManager.queryIntentActivities(query, 0)
+            packageManager.queryIntentActivities(query, 0)
                 .filter { it.activityInfo.packageName != packageName }
                 .distinctBy { it.activityInfo.packageName }
                 .sortedBy { it.loadLabel(packageManager).toString().lowercase() }
-                .take(45)
-            apps.forEach { info ->
-                val entry = AppEntry(
-                    info.loadLabel(packageManager).toString(),
-                    info.activityInfo.packageName,
-                    drawableToBitmap(info.loadIcon(packageManager))
-                )
-                allApps += entry
+                .forEach { info ->
+                    allApps += AppEntry(
+                        info.loadLabel(packageManager).toString(),
+                        info.activityInfo.packageName,
+                        drawableToBitmap(info.loadIcon(packageManager))
+                    )
+                }
+
+            fun findApp(vararg terms: String): AppEntry? = allApps.firstOrNull { app ->
+                val label = app.title.lowercase()
+                val pkg = app.packageName.lowercase()
+                terms.any { term -> label.contains(term.lowercase()) || pkg.contains(term.lowercase()) }
             }
-            // Five pinned apps live only in the fixed dock, never duplicated on the desktops.
-            dock.addAll(allApps.take(5))
-            val desktopApps = allApps.drop(5)
+            fun pin(target: MutableList<AppEntry>, vararg terms: String) {
+                findApp(*terms)?.let { app ->
+                    if (target.none { it.packageName == app.packageName }) target += app
+                }
+            }
+
+            // The dock is intentional and stable: phone, messages, browser, gallery.
+            pin(dock, "телефон", "phone", "dialer")
+            pin(dock, "сообщения", "messages", "messaging")
+            pin(dock, "chrome", "браузер")
+            pin(dock, "галерея", "gallery", "photos")
+
+            val dockPackages = dock.map { it.packageName }.toSet()
+            val desktopApps = allApps.filter { it.packageName !in dockPackages }
             desktopApps.forEachIndexed { index, entry ->
-                // Spread apps evenly across all three desktops instead of overcrowding the last one.
-                val page = if (desktopApps.isEmpty()) 0 else (index * 3 / desktopApps.size).coerceAtMost(2)
+                val page = if (desktopApps.isEmpty()) 0 else (index * 2 / desktopApps.size).coerceIn(0, 1)
                 orbs += Orb(mutableListOf(entry), page = page)
             }
+
+            // Browser bookmarks are launcher shortcuts, not installed applications.
+            val browserIcon = findApp("chrome", "браузер")?.icon
+                ?: allApps.firstOrNull()?.icon
+                ?: Bitmap.createBitmap((96*d).toInt(), (96*d).toInt(), Bitmap.Config.ARGB_8888)
+            fun shortcut(title: String, url: String): AppEntry {
+                val bitmap = Bitmap.createBitmap(browserIcon.width, browserIcon.height, Bitmap.Config.ARGB_8888)
+                val c = Canvas(bitmap)
+                val p = Paint(Paint.ANTI_ALIAS_FLAG)
+                p.color = Color.rgb(28, 72, 132)
+                c.drawCircle(bitmap.width/2f, bitmap.height/2f, bitmap.width*.47f, p)
+                p.color = Color.WHITE
+                p.textAlign = Paint.Align.CENTER
+                p.typeface = Typeface.create("sans-serif-bold", Typeface.BOLD)
+                p.textSize = bitmap.width*.34f
+                c.drawText("↗", bitmap.width/2f, bitmap.height*.62f, p)
+                return AppEntry(title, "url:$url", bitmap, url)
+            }
+            orbs += Orb(mutableListOf(shortcut("Шантарж", "https://shahmaty-mistikov.tuqo.app/#steps")), page = 2)
+            orbs += Orb(mutableListOf(shortcut("CosmosA27", "https://cosmos27.netlify.app/")), page = 2)
         }
 
         private fun drawableToBitmap(drawable: Drawable): Bitmap {
@@ -132,7 +166,7 @@ class MainActivity : Activity() {
                     orb.y = (usableBottom * (0.15f + row * 0.20f)).coerceIn(orb.radius * d + 88f * d, usableBottom - orb.radius * d)
                     val angle = index * 2.399f
                     // Calm, slow drift: each sphere keeps a gentle independent direction.
-                    val speed = (15f + (index % 5) * 1.5f) * d
+                    val speed = (34f + (index % 5) * 3.5f) * d
                     orb.vx = cos(angle) * speed
                     orb.vy = sin(angle) * speed
                 }
@@ -430,7 +464,7 @@ class MainActivity : Activity() {
                 }
             }
             // Keep collisions from gradually making the calm drift too fast.
-            val maxSpeed = 42f*d
+            val maxSpeed = 78f*d
             active.forEach { orb ->
                 val speed = hypot(orb.vx, orb.vy)
                 if (speed > maxSpeed) {
@@ -442,7 +476,11 @@ class MainActivity : Activity() {
         }
 
         private fun launch(app: AppEntry) {
-            packageManager.getLaunchIntentForPackage(app.packageName)?.let { startActivity(it) }
+            if (app.launchUrl != null) {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(app.launchUrl)))
+            } else {
+                packageManager.getLaunchIntentForPackage(app.packageName)?.let { startActivity(it) }
+            }
         }
 
         private fun renameFolder(folder: Orb) {
@@ -684,7 +722,7 @@ class MainActivity : Activity() {
             orbs.forEach { orb ->
                 val item=JSONObject()
                 val members=JSONArray()
-                orb.apps.forEach { members.put(it.packageName) }
+                orb.apps.forEach { members.put(it.launchUrl?.let { url -> "url:$url" } ?: it.packageName) }
                 item.put("apps",members)
                 item.put("folderName", orb.folderName)
                 item.put("x",if(width>0) orb.x/width else 0.5f)
@@ -704,7 +742,7 @@ class MainActivity : Activity() {
             val raw = prefs.getString("layout", null) ?: return
             try {
                 val saved=JSONArray(raw)
-                val byPackage=allApps.associateBy { it.packageName }
+                val byPackage=(allApps + orbs.flatMap { it.apps }.filter { it.launchUrl != null }).associateBy { it.packageName }
                 val restored=mutableListOf<Orb>()
                 for (i in 0 until saved.length()) {
                     val item=saved.getJSONObject(i)
@@ -713,7 +751,12 @@ class MainActivity : Activity() {
                     for (j in 0 until members.length()) {
                         val packageName = members.getString(j)
                         // Migrate older saved layouts: pinned dock apps must not reappear on desktops.
-                        if (dock.none { it.packageName == packageName }) {
+                        if (packageName.startsWith("url:")) {
+                            val url = packageName.removePrefix("url:")
+                            val title = if (url.contains("shahmaty-mistikov")) "Шантарж" else "CosmosA27"
+                            val icon = allApps.firstOrNull()?.icon ?: Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888)
+                            entries += AppEntry(title, packageName, icon, url)
+                        } else if (dock.none { it.packageName == packageName }) {
                             byPackage[packageName]?.let(entries::add)
                         }
                     }
@@ -729,9 +772,7 @@ class MainActivity : Activity() {
                 // Restore it as empty instead of recreating the default app layout.
                 orbs.clear()
                 orbs.addAll(restored)
-                // Keep the original five pinned apps in the dock after restoring folders/layout.
-                dock.clear()
-                dock.addAll(allApps.take(5))
+                // Keep the four explicitly selected dock apps; never replace them alphabetically.
             } catch (_: Exception) { }
         }
 
