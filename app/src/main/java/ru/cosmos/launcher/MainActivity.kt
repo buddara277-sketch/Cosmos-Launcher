@@ -2,6 +2,10 @@ package ru.cosmos.launcher
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.appwidget.AppWidgetHost
+import android.appwidget.AppWidgetHostView
+import android.appwidget.AppWidgetManager
+import android.appwidget.AppWidgetProviderInfo
 import android.content.Intent
 import android.graphics.*
 import android.net.Uri
@@ -13,24 +17,165 @@ import android.view.MotionEvent
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
+import android.widget.FrameLayout
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.math.*
 
 class MainActivity : Activity() {
     private var cosmosField: CosmosField? = null
+    private lateinit var root: FrameLayout
+    private lateinit var widgetHost: AppWidgetHost
+    private lateinit var widgetManager: AppWidgetManager
+    private var meteoredWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
+    private var meteoredWidgetView: AppWidgetHostView? = null
+    private var pendingWidgetInfo: AppWidgetProviderInfo? = null
+    private var pendingWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
+    private val widgetHostId = 27427
+    private val requestBindWidget = 27428
+    private val requestConfigureWidget = 27429
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN)
+        root = FrameLayout(this)
         cosmosField = CosmosField()
-        setContentView(cosmosField!!)
+        root.addView(cosmosField, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+        ))
+        widgetManager = AppWidgetManager.getInstance(this)
+        widgetHost = AppWidgetHost(this, widgetHostId)
+        meteoredWidgetId = getSharedPreferences("cosmos_launcher", MODE_PRIVATE)
+            .getInt("meteored_widget_id", AppWidgetManager.INVALID_APPWIDGET_ID)
+        if (meteoredWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) attachSavedWidget()
+        setContentView(root)
     }
 
     override fun onResume() {
         super.onResume()
+        try { widgetHost.startListening() } catch (_: Exception) { }
         cosmosField?.refreshInstalledApps()
+    }
+
+    override fun onStop() {
+        try { widgetHost.stopListening() } catch (_: Exception) { }
+        super.onStop()
+    }
+
+    private fun attachSavedWidget() {
+        val info = try { widgetManager.getAppWidgetInfo(meteoredWidgetId) } catch (_: Exception) { null }
+        if (info == null) {
+            meteoredWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
+            getSharedPreferences("cosmos_launcher", MODE_PRIVATE).edit()
+                .remove("meteored_widget_id").apply()
+            return
+        }
+        showWidget(info)
+    }
+
+    private fun showWidget(info: AppWidgetProviderInfo) {
+        val view = widgetHost.createView(this, meteoredWidgetId, info)
+        view.setAppWidget(meteoredWidgetId, info)
+        meteoredWidgetView?.let(root::removeView)
+        meteoredWidgetView = view
+        root.addView(view, FrameLayout.LayoutParams(1, 1))
+        cosmosField?.invalidate()
+    }
+
+    private fun chooseMeteoredWidget() {
+        val providers = widgetManager.installedProviders.filter {
+            it.provider.packageName.contains("meteored", true) ||
+                it.loadLabel(packageManager).toString().contains("meteored", true)
+        }
+        if (providers.isEmpty()) {
+            AlertDialog.Builder(this)
+                .setTitle("Виджет Meteored")
+                .setMessage("Android не нашёл виджет Meteored. Проверь, что приложение Meteored установлено и предоставляет виджет.")
+                .setPositiveButton("Открыть Meteored") { _, _ ->
+                    val pkg = allInstalledPackageForMeteored()
+                    val launchIntent = pkg?.let { packageManager.getLaunchIntentForPackage(it) }
+                    if (launchIntent != null) startActivity(launchIntent)
+                    else startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.meteored.com/")))
+                }
+                .setNegativeButton("Закрыть", null).show()
+            return
+        }
+        val labels = providers.map { info ->
+            val label = try { info.loadLabel(packageManager).toString() } catch (_: Exception) { "Meteored" }
+            label + " — " + info.minWidth + "×" + info.minHeight
+        }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("Выбери виджет Meteored")
+            .setItems(labels) { _, index -> bindMeteoredWidget(providers[index]) }
+            .setNegativeButton("Отмена", null).show()
+    }
+
+    private fun allInstalledPackageForMeteored(): String? =
+        packageManager.getInstalledPackages(0).firstOrNull {
+            it.packageName.contains("meteored", true)
+        }?.packageName
+
+    private fun bindMeteoredWidget(info: AppWidgetProviderInfo) {
+        pendingWidgetId = widgetHost.allocateAppWidgetId()
+        pendingWidgetInfo = info
+        val allowed = try {
+            widgetManager.bindAppWidgetIdIfAllowed(pendingWidgetId, info.provider)
+        } catch (_: Exception) { false }
+        if (allowed) finishWidgetBinding()
+        else {
+            val intent = Intent(AppWidgetManager.ACTION_APPWIDGET_BIND).apply {
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, pendingWidgetId)
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, info.provider)
+            }
+            startActivityForResult(intent, requestBindWidget)
+        }
+    }
+
+    private fun finishWidgetBinding() {
+        val info = pendingWidgetInfo ?: return
+        meteoredWidgetId = pendingWidgetId
+        val configure = info.configure
+        if (configure != null) {
+            val intent = Intent(AppWidgetManager.ACTION_APPWIDGET_CONFIGURE).apply {
+                component = configure
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, meteoredWidgetId)
+            }
+            startActivityForResult(intent, requestConfigureWidget)
+        } else saveBoundWidget(info)
+    }
+
+    private fun saveBoundWidget(info: AppWidgetProviderInfo) {
+        getSharedPreferences("cosmos_launcher", MODE_PRIVATE).edit()
+            .putInt("meteored_widget_id", meteoredWidgetId).apply()
+        showWidget(info)
+        pendingWidgetInfo = null
+        pendingWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
+    }
+
+    @Deprecated("Handled for Android widget binding and optional widget configuration")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == requestBindWidget) {
+            if (resultCode == RESULT_OK && pendingWidgetInfo != null) finishWidgetBinding()
+            else {
+                if (pendingWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID)
+                    widgetHost.deleteAppWidgetId(pendingWidgetId)
+                pendingWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
+                pendingWidgetInfo = null
+            }
+        } else if (requestCode == requestConfigureWidget) {
+            val info = pendingWidgetInfo
+            if (resultCode == RESULT_OK && info != null) saveBoundWidget(info)
+            else {
+                if (meteoredWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID)
+                    widgetHost.deleteAppWidgetId(meteoredWidgetId)
+                meteoredWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
+                pendingWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
+                pendingWidgetInfo = null
+            }
+        }
     }
 
     private data class AppEntry(val title: String, val packageName: String, val icon: Bitmap, val launchUrl: String? = null)
@@ -355,6 +500,7 @@ class MainActivity : Activity() {
             } else {
                 drawSearchBar(canvas)
                 if (currentPage == 2) drawWeatherWidget(canvas)
+                syncMeteoredWidgetView()
                 val now = System.nanoTime()
                 val dt = if (previousFrame == 0L) .016f else ((now - previousFrame) / 1e9f).coerceIn(0f, .03f)
                 previousFrame = now
@@ -523,6 +669,29 @@ class MainActivity : Activity() {
             c.drawLine(plusX-5f*d, iconY, plusX+5f*d, iconY, paint)
             c.drawLine(plusX, iconY-5f*d, plusX, iconY+5f*d, paint)
             paint.style = Paint.Style.FILL
+        }
+
+        private fun syncMeteoredWidgetView() {
+            val widget = meteoredWidgetView ?: return
+            val rect = weatherWidgetRect
+            val visible = currentPage == 2 && openedFolder == null && rect.width() > 0f
+            widget.visibility = if (visible) View.VISIBLE else View.GONE
+            if (visible) {
+                val params = widget.layoutParams as? FrameLayout.LayoutParams
+                    ?: FrameLayout.LayoutParams(1, 1)
+                val left = rect.left.toInt()
+                val top = rect.top.toInt()
+                val w = rect.width().toInt().coerceAtLeast(1)
+                val h = rect.height().toInt().coerceAtLeast(1)
+                if (params.width != w || params.height != h || params.leftMargin != left || params.topMargin != top) {
+                    params.width = w
+                    params.height = h
+                    params.leftMargin = left
+                    params.topMargin = top
+                    widget.layoutParams = params
+                }
+                widget.bringToFront()
+            }
         }
 
         private fun drawWeatherWidget(c: Canvas) {
@@ -798,10 +967,8 @@ class MainActivity : Activity() {
                         folderTouchIndex=if (!folderHeaderTapped && col in 0..2 && row>=0) row*3+col else -1
                         return true
                     }
-                    if (currentPage == 2 && weatherWidgetRect.contains(e.x,e.y)) {
-                        val meteored = allApps.firstOrNull { it.title.contains("Meteored",true) || it.packageName.contains("meteored",true) }
-                        if (meteored != null) launch(meteored)
-                        else startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.meteored.com/")))
+                    if (currentPage == 2 && meteoredWidgetView == null && weatherWidgetRect.contains(e.x,e.y)) {
+                        chooseMeteoredWidget()
                         return true
                     }
                     if (e.y in 20f*d..68f*d && e.x in 22f*d..(width-22f*d)) {
