@@ -29,7 +29,7 @@ class MainActivity : Activity() {
         var page: Int = 0
     ) {
         val isFolder: Boolean get() = apps.size > 1
-        val radius: Float get() = if (isFolder) 34f else 29f
+        val radius: Float get() = 29f
     }
 
     private inner class CosmosField : View(this) {
@@ -132,31 +132,60 @@ class MainActivity : Activity() {
         }
 
         private fun drawOrb(c: Canvas, orb: Orb) {
+            // Every sphere keeps the same 58dp footprint as the former app icon.
             val r = orb.radius * d
-            paint.color = Color.argb(48, 65, 145, 255)
-            c.drawCircle(orb.x, orb.y, r + 8f * d, paint)
-            if (orb.isFolder) {
-                paint.color = Color.argb(225, 31, 52, 92)
-                c.drawRoundRect(orb.x-r, orb.y-r, orb.x+r, orb.y+r, 13f*d, 13f*d, paint)
-                val mini = r * .58f
-                orb.apps.take(4).forEachIndexed { i, app ->
-                    val col = i % 2
-                    val row = i / 2
-                    val cx = orb.x + (col - .5f) * mini * 1.18f
-                    val cy = orb.y + (row - .5f) * mini * 1.18f
-                    c.drawBitmap(app.icon, null, RectF(cx-mini*.42f, cy-mini*.42f, cx+mini*.42f, cy+mini*.42f), paint)
-                }
-            } else {
-                val icon = orb.apps.first().icon
-                c.drawBitmap(icon, null, RectF(orb.x-r, orb.y-r, orb.x+r, orb.y+r), paint)
-            }
+            val key = if (orb.isFolder) "cosmos-folder" else orb.apps.first().packageName
+            val hue = (key.hashCode().toLong().and(0x7fffffff) % 360L).toFloat()
+            val base = Color.HSVToColor(floatArrayOf(hue, .62f, .88f))
+            val deep = Color.HSVToColor(floatArrayOf(hue, .78f, .34f))
+            val light = Color.HSVToColor(floatArrayOf(hue, .34f, 1f))
+
+            paint.shader = RadialGradient(
+                orb.x - r * .30f, orb.y - r * .38f, r * 1.42f,
+                intArrayOf(light, base, deep),
+                floatArrayOf(0f, .48f, 1f),
+                Shader.TileMode.CLAMP
+            )
+            paint.style = Paint.Style.FILL
+            c.drawCircle(orb.x, orb.y, r, paint)
+            paint.shader = null
+
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = 1.15f * d
+            paint.color = Color.argb(165, 220, 240, 255)
+            c.drawCircle(orb.x, orb.y, r - .7f * d, paint)
+            paint.style = Paint.Style.FILL
+
+            paint.shader = RadialGradient(
+                orb.x - r * .34f, orb.y - r * .48f, r * .48f,
+                intArrayOf(Color.argb(115, 255, 255, 255), Color.argb(0, 255, 255, 255)),
+                null,
+                Shader.TileMode.CLAMP
+            )
+            c.drawCircle(orb.x, orb.y, r * .94f, paint)
+            paint.shader = null
+
+            val label = if (orb.isFolder) "Папка" else orb.apps.first().title
             paint.color = Color.WHITE
             paint.textAlign = Paint.Align.CENTER
-            paint.textSize = 10f * d
-            paint.setShadowLayer(4f*d, 0f, 1f*d, Color.BLACK)
-            val label = if (orb.isFolder) "Папка" else orb.apps.first().title.take(17)
-            c.drawText(label, orb.x, orb.y+r+15f*d, paint)
+            paint.typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            paint.setShadowLayer(2.2f * d, 0f, 1f * d, Color.argb(210, 0, 0, 0))
+            var textSize = 10f * d
+            val maxWidth = r * 1.58f
+            paint.textSize = textSize
+            while (paint.measureText(label) > maxWidth && textSize > 7f * d) {
+                textSize -= .5f * d
+                paint.textSize = textSize
+            }
+            val fitted = if (paint.measureText(label) > maxWidth) {
+                val available = paint.breakText(label, true, maxWidth - 5f * d, null)
+                label.take(available.coerceAtLeast(1)).trimEnd() + "…"
+            } else label
+            val metrics = paint.fontMetrics
+            val baseline = orb.y - (metrics.ascent + metrics.descent) / 2f
+            c.drawText(fitted, orb.x, baseline, paint)
             paint.clearShadowLayer()
+            paint.typeface = Typeface.DEFAULT
         }
 
         private fun drawPageIndicator(c: Canvas) {
