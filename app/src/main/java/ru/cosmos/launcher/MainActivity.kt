@@ -443,7 +443,7 @@ class MainActivity : Activity() {
                 val x = (width * (0.13f + col * 0.245f)).coerceIn(34f*d, width - 34f*d)
                 val y = (minY + row * 76f*d + index * 9f*d).coerceIn(minY, maxY)
                 val angle = (app.packageName.hashCode() % 360) * (Math.PI / 180.0)
-                val speed = (82f + (index % 4) * 7f) * d
+                val speed = (164f + (index % 4) * 14f) * d
                 orbs += Orb(mutableListOf(app), x, y, cos(angle).toFloat()*speed,
                     sin(angle).toFloat()*speed, page = currentPage)
                 placed += app.packageName
@@ -583,7 +583,7 @@ class MainActivity : Activity() {
                 val x = (width * (0.13f + col * 0.245f)).coerceIn(34f*d, width - 34f*d)
                 val y = (minY + row * 76f*d).coerceIn(minY, maxY)
                 val angle = (app.packageName.hashCode() % 360) * (Math.PI / 180.0)
-                val speed = 86f*d
+                val speed = 172f*d
                 orbs += Orb(mutableListOf(app), x, y, cos(angle).toFloat()*speed,
                     sin(angle).toFloat()*speed, page = currentPage)
                 saveLayout()
@@ -617,7 +617,7 @@ class MainActivity : Activity() {
                     orb.y = (usableBottom * (0.15f + row * 0.20f)).coerceIn(orb.radius * d + 88f * d, usableBottom - orb.radius * d)
                     val angle = index * 2.399f
                     // Calm, slow drift: each sphere keeps a gentle independent direction.
-                    val speed = (66f + (index % 5) * 6f) * d
+                    val speed = (132f + (index % 5) * 12f) * d
                     orb.vx = cos(angle) * speed
                     orb.vy = sin(angle) * speed
                 }
@@ -1084,7 +1084,7 @@ class MainActivity : Activity() {
                 }
             }
             // Keep collisions from gradually making the calm drift too fast.
-            val maxSpeed = 138f*d
+            val maxSpeed = 276f*d
             active.forEach { orb ->
                 val speed = hypot(orb.vx, orb.vy)
                 if (speed > maxSpeed) {
@@ -1299,6 +1299,23 @@ class MainActivity : Activity() {
                         if (!dragging && hypot(e.x-downX,e.y-downY)>12f*d) {
                             touchHandler.removeCallbacks(longPressAction)
                             moved=true
+                            // A quick finger sweep transfers momentum to the held sphere
+                            // and nearby spheres, like pushing physical objects on a table.
+                            val pushX = (e.x-lastX) * 8.0f
+                            val pushY = (e.y-lastY) * 8.0f
+                            orb.vx = (orb.vx + pushX).coerceIn(-276f*d, 276f*d)
+                            orb.vy = (orb.vy + pushY).coerceIn(-276f*d, 276f*d)
+                            orbs.filter { it !== orb && it.page == currentPage }.forEach { other ->
+                                val dx = other.x - orb.x
+                                val dy = other.y - orb.y
+                                val distance = hypot(dx, dy)
+                                val reach = (orb.radius + other.radius) * d * 2.15f
+                                if (distance > 1f && distance < reach) {
+                                    val falloff = 1f - distance / reach
+                                    other.vx = (other.vx + pushX * falloff * .72f).coerceIn(-276f*d, 276f*d)
+                                    other.vy = (other.vy + pushY * falloff * .72f).coerceIn(-276f*d, 276f*d)
+                                }
+                            }
                         }
                         if (dragging) {
                             moved=true
@@ -1361,7 +1378,7 @@ class MainActivity : Activity() {
                                 target.vx*=.65f; target.vy*=.65f
                             } else {
                                 // A small release impulse avoids sudden fast launches.
-                                dragged.vx=((e.x-downX)*.10f).coerceIn(-30f*d,30f*d)
+                                dragged.vx=((e.x-downX)*.10f).coerceIn(-60f*d,60f*d)
                                 dragged.vy=((e.y-downY)*.10f).coerceIn(-30f*d,30f*d)
                             }
                             saveLayout()
