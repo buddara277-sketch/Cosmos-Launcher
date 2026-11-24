@@ -5,6 +5,8 @@ import android.content.Intent
 import android.graphics.*
 import android.graphics.drawable.Drawable
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
@@ -48,11 +50,23 @@ class MainActivity : Activity() {
         private var lastY = 0f
         private var moved = false
         private var dragging = false
+        private var longPressTriggered = false
+        private val touchHandler = Handler(Looper.getMainLooper())
         private var dragOffsetX = 0f
         private var dragOffsetY = 0f
         private var swipeHandled = false
         private var initialized = false
         private var layoutRestored = false
+        private val deletePill = RectF()
+        private val edgeSwitchZone get() = 34f * d
+        private val longPressAction = Runnable {
+            if (selected != null && !moved && openedFolder == null) {
+                dragging = true
+                longPressTriggered = true
+                selected?.let { it.vx = 0f; it.vy = 0f }
+                invalidate()
+            }
+        }
 
         init {
             isClickable = true
@@ -130,6 +144,7 @@ class MainActivity : Activity() {
                 orbs.filter { it.page == currentPage }.forEach { drawOrb(canvas, it) }
                 drawPageIndicator(canvas)
                 drawDock(canvas)
+                if (dragging) drawDeletePill(canvas)
             }
             // The open-folder screen is static; redraw only after touch events.
             if (openedFolder == null) postInvalidateOnAnimation()
@@ -222,6 +237,20 @@ class MainActivity : Activity() {
             } else label
             c.drawText(fitted, orb.x, orb.y+r*.78f, paint)
             paint.clearShadowLayer()
+            paint.typeface = Typeface.DEFAULT
+        }
+
+        private fun drawDeletePill(c: Canvas) {
+            val w = 124f*d
+            val h = 38f*d
+            deletePill.set((width-w)/2f, 18f*d, (width+w)/2f, 18f*d+h)
+            paint.color = Color.argb(235, 155, 42, 58)
+            c.drawRoundRect(deletePill, 22f*d, 22f*d, paint)
+            paint.color = Color.WHITE
+            paint.textAlign = Paint.Align.CENTER
+            paint.typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            paint.textSize = 14f*d
+            c.drawText("Удалить", width/2f, deletePill.centerY+5f*d, paint)
             paint.typeface = Typeface.DEFAULT
         }
 
@@ -341,7 +370,8 @@ class MainActivity : Activity() {
             when (e.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     downX=e.x; downY=e.y; lastX=e.x; lastY=e.y
-                    moved=false; dragging=false; swipeHandled=false
+                    moved=false; dragging=false; longPressTriggered=false; swipeHandled=false
+                    touchHandler.removeCallbacks(longPressAction)
                     if (openedFolder != null) {
                         val folder=openedFolder!!
                         val box=RectF(22f*d,height*.19f,width-22f*d,height*.78f)
@@ -364,20 +394,36 @@ class MainActivity : Activity() {
                     selected?.let {
                         dragOffsetX = it.x - e.x
                         dragOffsetY = it.y - e.y
+                        touchHandler.postDelayed(longPressAction, 450L)
                     }
                     return true
                 }
                 MotionEvent.ACTION_MOVE -> {
                     if (selected != null) {
                         val orb=selected!!
-                        if (!dragging && hypot(e.x-downX,e.y-downY)>9f*d) {
-                            dragging=true
+                        if (!dragging && hypot(e.x-downX,e.y-downY)>12f*d) {
+                            touchHandler.removeCallbacks(longPressAction)
                             moved=true
                         }
                         if (dragging) {
+                            moved=true
                             orb.x=e.x+dragOffsetX
                             orb.y=e.y+dragOffsetY
                             orb.vx=0f; orb.vy=0f
+                            // Dragging through a screen edge carries the orb to the adjacent desktop.
+                            if (e.x < edgeSwitchZone && currentPage > 0 && orb.page == currentPage) {
+                                currentPage--
+                                orb.page=currentPage
+                                orb.x=width-orb.radius*d-edgeSwitchZone
+                                getSharedPreferences("cosmos_launcher", MODE_PRIVATE).edit().putInt("current_page",currentPage).apply()
+                            } else if (e.x > width-edgeSwitchZone && currentPage < 2 && orb.page == currentPage) {
+                                currentPage++
+                                orb.page=currentPage
+                                orb.x=orb.radius*d+edgeSwitchZone
+                                getSharedPreferences("cosmos_launcher", MODE_PRIVATE).edit().putInt("current_page",currentPage).apply()
+                            }
+                            orb.x=orb.x.coerceIn(orb.radius*d+4f*d,width-orb.radius*d-4f*d)
+                            orb.y=orb.y.coerceIn(42f*d+orb.radius*d,height-112f*d-orb.radius*d)
                         }
                     } else if (!swipeHandled && abs(e.x-downX)>55f*d && abs(e.x-downX)>abs(e.y-downY)) {
                         currentPage=(currentPage + if (e.x<downX) 1 else -1).coerceIn(0,2)
@@ -389,8 +435,12 @@ class MainActivity : Activity() {
                     invalidate(); return true
                 }
                 MotionEvent.ACTION_UP -> {
+                    touchHandler.removeCallbacks(longPressAction)
                     selected?.let { dragged ->
-                        if (moved) {
+                        if (dragging && deletePill.contains(e.x,e.y)) {
+                            orbs.remove(dragged)
+                            saveLayout()
+                        } else if (dragging) {
                             val target=orbs.firstOrNull {
                                 it!==dragged && it.page==currentPage &&
                                 hypot(it.x-dragged.x,it.y-dragged.y)<(it.radius+dragged.radius)*d*.9f
@@ -410,12 +460,23 @@ class MainActivity : Activity() {
                                 dragged.vy=((e.y-downY)*.10f).coerceIn(-30f*d,30f*d)
                             }
                             saveLayout()
-                        } else if (dragged.isFolder) {
+                        } else if (!moved && dragged.isFolder) {
                             openedFolder=dragged
-                        } else launch(dragged.apps.first())
+                        } else if (!moved) launch(dragged.apps.first())
                     }
                     selected=null
+                    dragging=false
+                    longPressTriggered=false
+                    invalidate()
                     performClick()
+                    return true
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    touchHandler.removeCallbacks(longPressAction)
+                    selected=null
+                    dragging=false
+                    moved=false
+                    invalidate()
                     return true
                 }
             }
