@@ -70,6 +70,7 @@ class MainActivity : Activity() {
         private var initialized = false
         private var layoutRestored = false
         private val deletePill = RectF()
+        private val weatherWidgetRect = RectF()
         private val edgeSwitchZone get() = 34f * d
         private val longPressAction = Runnable {
             if (selected != null && !moved && openedFolder == null) {
@@ -99,51 +100,115 @@ class MainActivity : Activity() {
                     )
                 }
 
-            fun findApp(vararg terms: String): AppEntry? = allApps.firstOrNull { app ->
-                val label = app.title.lowercase()
-                val pkg = app.packageName.lowercase()
-                terms.any { term -> label.contains(term.lowercase()) || pkg.contains(term.lowercase()) }
-            }
-            fun pin(target: MutableList<AppEntry>, vararg terms: String) {
-                findApp(*terms)?.let { app ->
-                    if (target.none { it.packageName == app.packageName }) target += app
+            val used = mutableSetOf<String>()
+            fun find(vararg words: String): AppEntry? = allApps.firstOrNull { app ->
+                app.packageName !in used && words.any { word ->
+                    app.title.contains(word, ignoreCase = true) ||
+                        app.packageName.contains(word, ignoreCase = true)
                 }
             }
-
-            // The dock is intentional and stable: phone, messages, browser, gallery.
-            pin(dock, "телефон", "phone", "dialer")
-            pin(dock, "сообщения", "messages", "messaging")
-            pin(dock, "chrome", "браузер")
-            pin(dock, "галерея", "gallery", "photos")
-
-            val dockPackages = dock.map { it.packageName }.toSet()
-            val desktopApps = allApps.filter { it.packageName !in dockPackages }
-            desktopApps.forEachIndexed { index, entry ->
-                val page = if (desktopApps.isEmpty()) 0 else (index * 2 / desktopApps.size).coerceIn(0, 1)
-                orbs += Orb(mutableListOf(entry), page = page)
+            fun take(vararg words: String): AppEntry? = find(*words)?.also { used += it.packageName }
+            fun addApp(page: Int, vararg words: String) {
+                take(*words)?.let { orbs += Orb(mutableListOf(it), page = page) }
+            }
+            fun addFolder(name: String, page: Int, groups: List<List<String>>) {
+                val members = mutableListOf<AppEntry>()
+                groups.forEach { words -> take(*words.toTypedArray())?.let(members::add) }
+                if (members.isNotEmpty()) orbs += Orb(members, page = page, folderName = name)
+            }
+            fun pin(vararg words: String) {
+                take(*words)?.let(dock::add)
             }
 
-            // Browser bookmarks are launcher shortcuts, not installed applications.
-            val browserIcon = findApp("chrome", "браузер")?.icon
-                ?: allApps.firstOrNull()?.icon
+            // Fixed dock order from the reference screen.
+            pin("телефон", "phone", "dialer")
+            pin("сообщения", "messages", "messaging")
+            pin("chrome")
+            pin("галерея", "gallery", "photos")
+
+            // Desktop 1: the exact folder names and independent shortcuts from the reference.
+            addApp(0, "cosmos notes", "cosmosnotes")
+            addFolder("27", 0, listOf(
+                listOf("youtube"), listOf("вконтакте", "vk"),
+                listOf("viber"), listOf("telegram"),
+                listOf("reader", "книги", "book"),
+                listOf("cosmos connect", "cosmosconnect"),
+                listOf("shazam"), listOf("whatsapp"),
+                listOf("яндекс карты", "maps")
+            ))
+            addApp(0, "camera", "камера")
+            addFolder("Google", 0, listOf(
+                listOf("gmail"), listOf("google maps", "карты"),
+                listOf("drive"), listOf("youtube"),
+                listOf("google photos"), listOf("play store"),
+                listOf("google")
+            ))
+            addFolder("Инструменты", 0, listOf(
+                listOf("калькулятор", "calculator"), listOf("часы", "clock"),
+                listOf("погода", "weather"), listOf("диктофон", "recorder"),
+                listOf("компас", "compass"), listOf("заметки", "notes")
+            ))
+            addApp(0, "настройки", "settings")
+
+            // Desktop 2: named folders and apps from the second reference screen.
+            addFolder("Игры", 1, listOf(
+                listOf("game"), listOf("игр"), listOf("play games")
+            ))
+            addApp(1, "vpn наружу", "vpn")
+            addFolder("ОФИС", 1, listOf(
+                listOf("word"), listOf("excel"), listOf("powerpoint"),
+                listOf("wps"), listOf("pdf"), listOf("office")
+            ))
+            addFolder("Хонор", 1, listOf(
+                listOf("honor"), listOf("health"), listOf("тема", "themes"),
+                listOf("device clone")
+            ))
+            addFolder("Разное", 1, listOf(
+                listOf("zoom"), listOf("maxim"), listOf("qr"),
+                listOf("go"), listOf("яндекс")
+            ))
+            addApp(1, "offradio")
+            addFolder("Магазин", 1, listOf(
+                listOf("wildberries", "wb"), listOf("ozon"),
+                listOf("яндекс маркет"), listOf("магазин")
+            ))
+            addApp(1, "халва", "совкомбанк")
+            addApp(1, "qwen")
+            addApp(1, "яндекс браузер", "yandex browser")
+            addApp(1, "obsidian")
+            addApp(1, "гигачат", "gigachat")
+            addApp(1, "chatgpt")
+            addApp(1, "алиса ai", "alice")
+            addApp(1, "capcut")
+            addApp(1, "deepseek")
+
+            // Desktop 3: one app, two browser bookmarks and a Meteored weather panel.
+            addApp(2, "buddy")
+            val iconSource = allApps.firstOrNull()?.icon
                 ?: Bitmap.createBitmap((96*d).toInt(), (96*d).toInt(), Bitmap.Config.ARGB_8888)
-            fun shortcut(title: String, url: String): AppEntry {
-                val bitmap = Bitmap.createBitmap(browserIcon.width, browserIcon.height, Bitmap.Config.ARGB_8888)
+            fun bookmark(title: String, url: String): AppEntry {
+                val bitmap = Bitmap.createBitmap(iconSource.width, iconSource.height, Bitmap.Config.ARGB_8888)
                 val c = Canvas(bitmap)
                 val p = Paint(Paint.ANTI_ALIAS_FLAG)
-                p.color = Color.rgb(28, 72, 132)
+                p.color = Color.rgb(25, 83, 150)
                 c.drawCircle(bitmap.width/2f, bitmap.height/2f, bitmap.width*.47f, p)
                 p.color = Color.WHITE
                 p.textAlign = Paint.Align.CENTER
                 p.typeface = Typeface.create("sans-serif-bold", Typeface.BOLD)
-                p.textSize = bitmap.width*.34f
-                c.drawText("↗", bitmap.width/2f, bitmap.height*.62f, p)
+                p.textSize = bitmap.width*.38f
+                c.drawText("↗", bitmap.width/2f, bitmap.height*.64f, p)
                 return AppEntry(title, "url:$url", bitmap, url)
             }
-            orbs += Orb(mutableListOf(shortcut("Шантарж", "https://shahmaty-mistikov.tuqo.app/#steps")), page = 2)
-            orbs += Orb(mutableListOf(shortcut("CosmosA27", "https://cosmos27.netlify.app/")), page = 2)
+            orbs += Orb(mutableListOf(bookmark("Шантарж", "https://shahmaty-mistikov.tuqo.app/#steps")), page = 2)
+            orbs += Orb(mutableListOf(bookmark("CosmosA27", "https://cosmos27.netlify.app/")), page = 2)
+            // Keep any apps not recognized by the reference layout available rather than hiding them.
+            allApps.filter { it.packageName !in used }.forEach { app ->
+                if (app.packageName !in dock.map { it.packageName }) {
+                    orbs += Orb(mutableListOf(app), page = 1)
+                    used += app.packageName
+                }
+            }
         }
-
         private fun drawableToBitmap(drawable: Drawable): Bitmap {
             val size = (96 * d).toInt().coerceAtLeast(64)
             return Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888).also {
@@ -184,6 +249,7 @@ class MainActivity : Activity() {
                 drawOpenFolder(canvas, openedFolder!!)
             } else {
                 drawSearchBar(canvas)
+                if (currentPage == 2) drawWeatherWidget(canvas)
                 val now = System.nanoTime()
                 val dt = if (previousFrame == 0L) .016f else ((now - previousFrame) / 1e9f).coerceIn(0f, .03f)
                 previousFrame = now
@@ -341,6 +407,41 @@ class MainActivity : Activity() {
             paint.typeface = Typeface.create("sans-serif", Typeface.NORMAL)
             paint.textSize = 13f * d
             c.drawText("Поиск Google", left + 43f * d, iconY + 4.5f * d, paint)
+        }
+
+        private fun drawWeatherWidget(c: Canvas) {
+            val left = 24f*d
+            val top = height*.39f
+            val right = width-24f*d
+            val bottom = top+112f*d
+            weatherWidgetRect.set(left,top,right,bottom)
+            paint.style = Paint.Style.FILL
+            paint.shader = LinearGradient(left,top,right,bottom,
+                intArrayOf(Color.argb(205,30,75,125),Color.argb(175,12,29,62)),
+                null,Shader.TileMode.CLAMP)
+            c.drawRoundRect(weatherWidgetRect,22f*d,22f*d,paint)
+            paint.shader = null
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = 1.2f*d
+            paint.color = Color.argb(190,190,225,255)
+            c.drawRoundRect(weatherWidgetRect,22f*d,22f*d,paint)
+            paint.style = Paint.Style.FILL
+            paint.color = Color.WHITE
+            paint.textAlign = Paint.Align.LEFT
+            paint.typeface = Typeface.create("sans-serif-medium",Typeface.BOLD)
+            paint.textSize = 17f*d
+            c.drawText("Meteored",left+18f*d,top+31f*d,paint)
+            paint.textSize = 12f*d
+            paint.typeface = Typeface.DEFAULT
+            paint.color = Color.argb(220,220,235,255)
+            c.drawText("Погодный виджет",left+18f*d,top+57f*d,paint)
+            paint.textSize = 11f*d
+            paint.color = Color.argb(185,210,225,245)
+            c.drawText("Нажми, чтобы открыть прогноз",left+18f*d,top+82f*d,paint)
+            paint.textAlign = Paint.Align.CENTER
+            paint.textSize = 35f*d
+            paint.color = Color.rgb(255,214,105)
+            c.drawText("☀",right-42f*d,top+68f*d,paint)
         }
 
         private fun drawDeletePill(c: Canvas) {
@@ -579,6 +680,12 @@ class MainActivity : Activity() {
                         val col=((e.x-box.left-14f*d)/cellW).toInt()
                         val row=((e.y-box.top-55f*d+folderScrollOffset)/(91f*d)).toInt()
                         folderTouchIndex=if (!folderHeaderTapped && col in 0..2 && row>=0) row*3+col else -1
+                        return true
+                    }
+                    if (currentPage == 2 && weatherWidgetRect.contains(e.x,e.y)) {
+                        val meteored = allApps.firstOrNull { it.title.contains("Meteored",true) || it.packageName.contains("meteored",true) }
+                        if (meteored != null) launch(meteored)
+                        else startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.meteored.com/")))
                         return true
                     }
                     if (e.y in 20f*d..68f*d && e.x in 22f*d..(width-22f*d)) {
