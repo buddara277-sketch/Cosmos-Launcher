@@ -1177,7 +1177,7 @@ class MainActivity : Activity() {
                     touchHandler.removeCallbacks(longPressAction)
                     if (openedFolder != null) {
                         val folder=openedFolder!!
-                        val box=RectF(22f*d,height*.19f,width-22f*d,height*.78f)
+                        val box=RectF(18f*d,height*.17f,width-18f*d,height*.80f)
                         if (!box.contains(e.x,e.y)) {
                             openedFolder=null
                             folderScrollOffset=0f
@@ -1187,10 +1187,10 @@ class MainActivity : Activity() {
                         folderDownY=e.y
                         folderDownOffset=folderScrollOffset
                         folderTouchMoved=false
-                        folderHeaderTapped = e.y < box.top + 62f*d
+                        folderHeaderTapped = e.y < box.top + 72f*d
                         val cellW=(box.width()-28f*d)/3f
                         val col=((e.x-box.left-14f*d)/cellW).toInt()
-                        val row=((e.y-box.top-55f*d+folderScrollOffset)/(91f*d)).toInt()
+                        val row=((e.y-box.top-58f*d+folderScrollOffset)/(94f*d)).toInt()
                         folderTouchIndex=if (!folderHeaderTapped && col in 0..2 && row>=0) row*3+col else -1
                         return true
                     }
@@ -1221,10 +1221,10 @@ class MainActivity : Activity() {
                     if (openedFolder != null) {
                         if (abs(e.y-folderDownY)>8f*d) {
                             folderTouchMoved=true
-                            val boxHeight=height*.59f
+                            val boxHeight=height*.63f
                             val rows=ceil(openedFolder!!.apps.size/3.0).toInt()
                             val visibleHeight=(boxHeight-96f*d).coerceAtLeast(0f)
-                            val maxScroll=(rows*91f*d-visibleHeight).coerceAtLeast(0f)
+                            val maxScroll=(rows*94f*d-visibleHeight).coerceAtLeast(0f)
                             folderScrollOffset=(folderDownOffset+folderDownY-e.y).coerceIn(0f,maxScroll)
                         }
                         invalidate()
