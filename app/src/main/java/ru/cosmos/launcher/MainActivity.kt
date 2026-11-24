@@ -346,6 +346,8 @@ class MainActivity : Activity() {
                         orb.x=e.x; orb.y=e.y; orb.vx=0f; orb.vy=0f
                     } else if (!swipeHandled && abs(e.x-downX)>55f*d && abs(e.x-downX)>abs(e.y-downY)) {
                         currentPage=(currentPage + if (e.x<downX) 1 else -1).coerceIn(0,2)
+                        getSharedPreferences("cosmos_launcher", MODE_PRIVATE).edit()
+                            .putInt("current_page", currentPage).apply()
                         swipeHandled=true
                     }
                     lastX=e.x; lastY=e.y
@@ -396,11 +398,16 @@ class MainActivity : Activity() {
                 item.put("page",orb.page)
                 array.put(item)
             }
-            getSharedPreferences("cosmos_launcher", MODE_PRIVATE).edit().putString("layout",array.toString()).apply()
+            getSharedPreferences("cosmos_launcher", MODE_PRIVATE).edit()
+                .putString("layout",array.toString())
+                .putInt("current_page", currentPage)
+                .apply()
         }
 
         private fun restoreLayout() {
-            val raw=getSharedPreferences("cosmos_launcher", MODE_PRIVATE).getString("layout",null) ?: return
+            val prefs = getSharedPreferences("cosmos_launcher", MODE_PRIVATE)
+            currentPage = prefs.getInt("current_page", 0).coerceIn(0, 2)
+            val raw = prefs.getString("layout", null) ?: return
             try {
                 val saved=JSONArray(raw)
                 val byPackage=orbs.flatMap { it.apps }.associateBy { it.packageName }
