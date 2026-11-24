@@ -809,9 +809,11 @@ class MainActivity : Activity() {
                     Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
             }
 
-            // Dark translucent label strip keeps the app artwork visible and text readable.
-            paint.color = Color.argb(118, 5, 10, 28)
-            c.drawRect(orb.x-r, orb.y+r*.38f, orb.x+r, orb.y+r, paint)
+            // App spheres need a dark label strip; folder previews keep every mini-icon unobscured.
+            if (!orb.isFolder) {
+                paint.color = Color.argb(118, 5, 10, 28)
+                c.drawRect(orb.x-r, orb.y+r*.38f, orb.x+r, orb.y+r, paint)
+            }
 
             // Subtle glass highlight.
             paint.shader = RadialGradient(
