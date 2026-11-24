@@ -94,8 +94,10 @@ class MainActivity : Activity() {
                     orb.x = (w * (0.13f + col * 0.245f)).coerceIn(orb.radius * d + 4f, w - orb.radius * d - 4f)
                     orb.y = (usableBottom * (0.15f + row * 0.20f)).coerceIn(orb.radius * d + 35f * d, usableBottom - orb.radius * d)
                     val angle = index * 2.399f
-                    orb.vx = cos(angle) * 32f * d
-                    orb.vy = sin(angle) * 32f * d
+                    // Calm, slow drift: each sphere keeps a gentle independent direction.
+                    val speed = (15f + (index % 5) * 1.5f) * d
+                    orb.vx = cos(angle) * speed
+                    orb.vy = sin(angle) * speed
                 }
             }
             if (!layoutRestored) {
@@ -301,7 +303,7 @@ class MainActivity : Activity() {
                     b.x+=nx*overlap*.5f; b.y+=ny*overlap*.5f
                     val rel=(b.vx-a.vx)*nx+(b.vy-a.vy)*ny
                     if (rel<0f) {
-                        val impulse=rel*.9f
+                        val impulse=rel*.65f
                         a.vx+=impulse*nx; a.vy+=impulse*ny
                         b.vx-=impulse*nx; b.vy-=impulse*ny
                     }
@@ -370,8 +372,9 @@ class MainActivity : Activity() {
                                 orbs.remove(dragged)
                                 target.vx*=.65f; target.vy*=.65f
                             } else {
-                                dragged.vx=((e.x-downX)*1.4f).coerceIn(-420f*d,420f*d)
-                                dragged.vy=((e.y-downY)*1.4f).coerceIn(-420f*d,420f*d)
+                                // A small release impulse avoids sudden fast launches.
+                                dragged.vx=((e.x-downX)*.16f).coerceIn(-42f*d,42f*d)
+                                dragged.vy=((e.y-downY)*.16f).coerceIn(-42f*d,42f*d)
                             }
                             saveLayout()
                         } else if (dragged.isFolder) {
