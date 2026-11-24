@@ -943,37 +943,68 @@ class MainActivity : Activity() {
         }
 
         private fun drawOpenFolder(c: Canvas, folder: Orb) {
-            paint.color = Color.argb(210, 4, 8, 24)
+            paint.style = Paint.Style.FILL
+            paint.color = Color.argb(205, 2, 6, 22)
             c.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
-            paint.color = Color.argb(245, 25, 38, 68)
-            val box = RectF(22f*d, height*.19f, width-22f*d, height*.78f)
-            c.drawRoundRect(box, 25f*d, 25f*d, paint)
+            val box = RectF(18f*d, height*.17f, width-18f*d, height*.80f)
+            paint.setShadowLayer(28f*d, 0f, 8f*d, Color.argb(115, 65, 145, 255))
+            paint.shader = LinearGradient(box.left, box.top, box.right, box.bottom,
+                intArrayOf(Color.argb(242, 34, 57, 96), Color.argb(238, 10, 22, 49), Color.argb(245, 24, 39, 76)),
+                null, Shader.TileMode.CLAMP)
+            c.drawRoundRect(box, 30f*d, 30f*d, paint)
+            paint.shader = null
+            paint.clearShadowLayer()
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = 1.2f*d
+            paint.color = Color.argb(155, 190, 225, 255)
+            c.drawRoundRect(box, 30f*d, 30f*d, paint)
+            paint.style = Paint.Style.FILL
+            paint.shader = LinearGradient(box.left, box.top, box.right, box.top+100f*d,
+                intArrayOf(Color.argb(48,255,255,255), Color.TRANSPARENT), null, Shader.TileMode.CLAMP)
+            c.drawRoundRect(box, 30f*d, 30f*d, paint)
+            paint.shader = null
+
             paint.color = Color.WHITE
             paint.textAlign = Paint.Align.CENTER
+            paint.typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
             paint.textSize = 19f*d
-            c.drawText(folder.folderName, width/2f, box.top+36f*d, paint)
+            c.drawText(folder.folderName, width/2f, box.top+39f*d, paint)
+            paint.color = Color.argb(190, 170, 205, 245)
+            paint.textSize = 9f*d
+            paint.typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+            c.drawText("${folder.apps.size} ПРИЛОЖЕНИЙ", width/2f, box.top+57f*d, paint)
             paint.textAlign=Paint.Align.RIGHT
-            paint.textSize=12f*d
-            paint.color=Color.argb(210,190,215,255)
-            c.drawText("✎",box.right-18f*d,box.top+35f*d,paint)
+            paint.textSize=16f*d
+            paint.color=Color.argb(225,205,230,255)
+            c.drawText("✎",box.right-22f*d,box.top+39f*d,paint)
             paint.textAlign=Paint.Align.CENTER
             val cellW = (box.width()-28f*d)/3f
             val contentClip = c.save()
-            c.clipRect(box.left+8f*d, box.top+62f*d, box.right-8f*d, box.bottom-34f*d)
+            c.clipRect(box.left+8f*d, box.top+72f*d, box.right-8f*d, box.bottom-38f*d)
             folder.apps.forEachIndexed { i, app ->
                 val col=i%3; val row=i/3
                 val cx=box.left+14f*d+cellW*(col+.5f)
-                val cy=box.top+92f*d+row*91f*d-folderScrollOffset
-                if (cy > box.top+55f*d && cy < box.bottom-30f*d) {
+                val cy=box.top+105f*d+row*94f*d-folderScrollOffset
+                if (cy > box.top+66f*d && cy < box.bottom-32f*d) {
+                    val tile = RectF(cx-31f*d, cy-31f*d, cx+31f*d, cy+31f*d)
+                    paint.color = Color.argb(72, 150, 190, 245)
+                    c.drawRoundRect(tile, 17f*d, 17f*d, paint)
+                    paint.style = Paint.Style.STROKE
+                    paint.strokeWidth = .8f*d
+                    paint.color = Color.argb(95, 205, 230, 255)
+                    c.drawRoundRect(tile, 17f*d, 17f*d, paint)
+                    paint.style = Paint.Style.FILL
                     val size=43f*d
                     c.drawBitmap(app.icon,null,RectF(cx-size/2,cy-size/2,cx+size/2,cy+size/2),paint)
-                    paint.color=Color.WHITE; paint.textSize=10f*d
-                    c.drawText(app.title.take(15),cx,cy+size/2+14f*d,paint)
+                    paint.color=Color.WHITE
+                    paint.textSize=10f*d
+                    c.drawText(app.title.take(15),cx,cy+size/2+16f*d,paint)
                 }
             }
             c.restoreToCount(contentClip)
-            paint.color=Color.LTGRAY; paint.textSize=12f*d
-            c.drawText("Нажми вне окна, чтобы закрыть",width/2f,box.bottom-18f*d,paint)
+            paint.color=Color.argb(170,175,205,240)
+            paint.textSize=10f*d
+            c.drawText("Смахни вверх или нажми снаружи",width/2f,box.bottom-18f*d,paint)
         }
 
         private fun updatePhysics(dt: Float) {
