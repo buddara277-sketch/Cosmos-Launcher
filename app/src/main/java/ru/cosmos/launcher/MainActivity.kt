@@ -1002,7 +1002,7 @@ class MainActivity : Activity() {
             // The trash target stays above the dock for the entire drag gesture.
             val w = 174f*d
             val h = 50f*d
-            deletePill.set((width-w)/2f, height-142f*d, (width+w)/2f, height-142f*d+h)
+            deletePill.set((width-w)/2f, height-190f*d, (width+w)/2f, height-190f*d+h)
             val hovered = selected?.let { deletePill.contains(it.x, it.y) } == true
             paint.style = Paint.Style.FILL
             paint.setShadowLayer(if (hovered) 26f*d else 14f*d, 0f, 3f*d,
