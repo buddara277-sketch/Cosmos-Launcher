@@ -340,8 +340,8 @@ class MainActivity : Activity() {
                         return true
                     }
                     val dockTop=height-76f*d
-                    if (e.y>=dockTop) {
-                        val index=(e.x/(width.toFloat()/dock.size.coerceAtLeast(1))).toInt().coerceIn(0,dock.size-1)
+                    if (e.y>=dockTop && dock.isNotEmpty()) {
+                        val index=(e.x/(width.toFloat()/dock.size)).toInt().coerceIn(0,dock.size-1)
                         launch(dock[index]); return true
                     }
                     selected=orbs.asReversed().firstOrNull {
@@ -438,7 +438,13 @@ class MainActivity : Activity() {
                     val item=saved.getJSONObject(i)
                     val members=item.getJSONArray("apps")
                     val entries=mutableListOf<AppEntry>()
-                    for (j in 0 until members.length()) byPackage[members.getString(j)]?.let(entries::add)
+                    for (j in 0 until members.length()) {
+                        val packageName = members.getString(j)
+                        // Migrate older saved layouts: pinned dock apps must not reappear on desktops.
+                        if (dock.none { it.packageName == packageName }) {
+                            byPackage[packageName]?.let(entries::add)
+                        }
+                    }
                     if (entries.isNotEmpty()) restored += Orb(entries, item.optDouble("x",.5).toFloat()*width,
                         item.optDouble("y",.3).toFloat()*height, page=item.optInt("page",0).coerceIn(0,2))
                 }
