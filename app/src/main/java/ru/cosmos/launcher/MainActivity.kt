@@ -65,7 +65,7 @@ class MainActivity : Activity() {
                 .filter { it.activityInfo.packageName != packageName }
                 .distinctBy { it.activityInfo.packageName }
                 .sortedBy { it.loadLabel(packageManager).toString().lowercase() }
-                .take(41)
+                .take(45)
             apps.forEach { info ->
                 val entry = AppEntry(
                     info.loadLabel(packageManager).toString(),
@@ -76,8 +76,11 @@ class MainActivity : Activity() {
             }
             // Five pinned apps live only in the fixed dock, never duplicated on the desktops.
             dock.addAll(allApps.take(5))
-            allApps.drop(5).forEachIndexed { index, entry ->
-                orbs += Orb(mutableListOf(entry), page = index / 12)
+            val desktopApps = allApps.drop(5)
+            desktopApps.forEachIndexed { index, entry ->
+                // Spread apps evenly across all three desktops instead of overcrowding the last one.
+                val page = if (desktopApps.isEmpty()) 0 else (index * 3 / desktopApps.size).coerceAtMost(2)
+                orbs += Orb(mutableListOf(entry), page = page)
             }
         }
 
