@@ -210,7 +210,7 @@ class MainActivity : Activity() {
         var forceFolder: Boolean = false
     ) {
         val isFolder: Boolean get() = forceFolder || apps.size > 1
-        val radius: Float get() = if (isFolder) 37f else 29f
+        val radius: Float get() = if (isFolder) 43f else 34f
     }
 
     private inner class CosmosField : View(this) {
@@ -297,32 +297,32 @@ class MainActivity : Activity() {
             // The dock is a fixed four-slot set. Resolve it once, then keep the
             // exact package order in preferences so newly installed apps never replace it.
             val dockPrefs = getSharedPreferences("cosmos_launcher", MODE_PRIVATE)
-            val savedDock = dockPrefs.getString("dock_packages", null)
-            if (!savedDock.isNullOrBlank()) {
-                savedDock.split("|").forEach { pkg ->
-                    allApps.firstOrNull { it.packageName == pkg }?.let(dock::add)
+            val savedDock = dockPrefs.getString("dock_packages", null)?.split("|").orEmpty()
+            fun normalized(value: String) = value.lowercase().replace(" ", "").replace("_", "")
+            fun resolveDockSlot(index: Int, labelAliases: List<String>, packageAliases: List<String>) {
+                val labels = labelAliases.map(::normalized).toSet()
+                val packages = packageAliases.toSet()
+                val saved = savedDock.getOrNull(index)?.let { pkg ->
+                    allApps.firstOrNull { it.packageName == pkg && (it.packageName in packages || normalized(it.title) in labels) }
                 }
-            } else {
-                fun normalized(value: String) = value.lowercase().replace(" ", "").replace("_", "")
-                fun pin(labelAliases: List<String>, packageAliases: List<String>) {
-                    val labels = labelAliases.map(::normalized).toSet()
-                    val packages = packageAliases.toSet()
-                    allApps.firstOrNull {
-                        normalized(it.title) in labels || it.packageName in packages
-                    }?.let(dock::add)
+                val app = saved ?: allApps.firstOrNull {
+                    it.packageName in packages || normalized(it.title) in labels
                 }
-                pin(listOf("Телефон", "Phone", "Dialer"), listOf(
-                    "com.google.android.dialer", "com.android.dialer", "com.huawei.contacts"
-                ))
-                pin(listOf("Сообщения", "Messages", "SMS"), listOf(
-                    "com.google.android.apps.messaging", "com.android.mms", "com.huawei.message"
-                ))
-                pin(listOf("Chrome"), listOf("com.android.chrome"))
-                pin(listOf("Галерея", "Gallery", "Photos"), listOf(
-                    "com.huawei.photos", "com.android.gallery3d", "com.google.android.apps.photos"
-                ))
-                dockPrefs.edit().putString("dock_packages", dock.joinToString("|") { it.packageName }).apply()
+                app?.takeIf { dock.none { existing -> existing.packageName == it.packageName } }?.let(dock::add)
             }
+            // Rebuild the four fixed slots in order and repair older three-slot saves.
+            resolveDockSlot(0, listOf("Телефон", "Phone", "Dialer"), listOf(
+                "com.google.android.dialer", "com.android.dialer", "com.huawei.contacts",
+                "com.huawei.phone", "com.android.phone"
+            ))
+            resolveDockSlot(1, listOf("Сообщения", "Messages", "SMS"), listOf(
+                "com.google.android.apps.messaging", "com.android.mms", "com.huawei.message"
+            ))
+            resolveDockSlot(2, listOf("Chrome"), listOf("com.android.chrome"))
+            resolveDockSlot(3, listOf("Галерея", "Gallery", "Photos"), listOf(
+                "com.huawei.photos", "com.android.gallery3d", "com.google.android.apps.photos"
+            ))
+            dockPrefs.edit().putString("dock_packages", dock.joinToString("|") { it.packageName }).apply()
 
             // Desktop 1: the exact folder names and independent shortcuts from the reference.
             addApp(0, "cosmos notes", "cosmosnotes")
@@ -443,7 +443,7 @@ class MainActivity : Activity() {
                 val x = (width * (0.13f + col * 0.245f)).coerceIn(34f*d, width - 34f*d)
                 val y = (minY + row * 76f*d + index * 9f*d).coerceIn(minY, maxY)
                 val angle = (app.packageName.hashCode() % 360) * (Math.PI / 180.0)
-                val speed = (38f + (index % 4) * 4f) * d
+                val speed = (82f + (index % 4) * 7f) * d
                 orbs += Orb(mutableListOf(app), x, y, cos(angle).toFloat()*speed,
                     sin(angle).toFloat()*speed, page = currentPage)
                 placed += app.packageName
@@ -583,7 +583,7 @@ class MainActivity : Activity() {
                 val x = (width * (0.13f + col * 0.245f)).coerceIn(34f*d, width - 34f*d)
                 val y = (minY + row * 76f*d).coerceIn(minY, maxY)
                 val angle = (app.packageName.hashCode() % 360) * (Math.PI / 180.0)
-                val speed = 48f*d
+                val speed = 86f*d
                 orbs += Orb(mutableListOf(app), x, y, cos(angle).toFloat()*speed,
                     sin(angle).toFloat()*speed, page = currentPage)
                 saveLayout()
@@ -617,7 +617,7 @@ class MainActivity : Activity() {
                     orb.y = (usableBottom * (0.15f + row * 0.20f)).coerceIn(orb.radius * d + 88f * d, usableBottom - orb.radius * d)
                     val angle = index * 2.399f
                     // Calm, slow drift: each sphere keeps a gentle independent direction.
-                    val speed = (34f + (index % 5) * 3.5f) * d
+                    val speed = (66f + (index % 5) * 6f) * d
                     orb.vx = cos(angle) * speed
                     orb.vy = sin(angle) * speed
                 }
@@ -694,7 +694,7 @@ class MainActivity : Activity() {
             paint.style = Paint.Style.FILL
             paint.shader = LinearGradient(
                 orb.x - r, orb.y - r, orb.x + r, orb.y + r,
-                intArrayOf(Color.argb(105, 255, 255, 255), Color.argb(28, Color.red(base), Color.green(base), Color.blue(base)), Color.argb(105, Color.red(deep), Color.green(deep), Color.blue(deep))),
+                intArrayOf(Color.argb(52, 255, 255, 255), Color.argb(12, Color.red(base), Color.green(base), Color.blue(base)), Color.argb(42, Color.red(deep), Color.green(deep), Color.blue(deep))),
                 null, Shader.TileMode.CLAMP
             )
             c.drawRect(orb.x-r, orb.y-r, orb.x+r, orb.y+r, paint)
@@ -712,11 +712,11 @@ class MainActivity : Activity() {
             } else {
                 // Keep the original icon crisp, but leave a glass rim visible around it.
                 val icon = orb.apps.first().icon
-                val iconSize = r * .79f
-                paint.color = Color.argb(62, 220, 238, 255)
-                c.drawCircle(orb.x, orb.y-r*.04f, iconSize+3f*d, paint)
+                val iconSize = r * .91f
+                // Original app artwork at full color, without a milky overlay.
                 c.drawBitmap(icon, null,
-                    RectF(orb.x-iconSize, orb.y-iconSize, orb.x+iconSize, orb.y+iconSize), paint)
+                    RectF(orb.x-iconSize, orb.y-iconSize, orb.x+iconSize, orb.y+iconSize),
+                    Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
             }
 
             // Dark translucent label strip keeps the app artwork visible and text readable.
@@ -733,13 +733,17 @@ class MainActivity : Activity() {
             paint.shader = null
             c.restoreToCount(save)
 
+            // Bright neon outline with a soft outer glow.
             paint.style = Paint.Style.STROKE
-            paint.strokeWidth = 1.15f * d
-            paint.color = Color.argb(205, 220, 240, 255)
-            c.drawCircle(orb.x, orb.y, r - .7f*d, paint)
-            paint.strokeWidth = .65f*d
-            paint.color = Color.argb(92, 220, 240, 255)
-            c.drawCircle(orb.x, orb.y, r - 3.2f*d, paint)
+            paint.strokeCap = Paint.Cap.ROUND
+            paint.strokeWidth = 4.2f * d
+            paint.color = if (orb.isFolder) Color.rgb(65, 205, 255) else Color.rgb(105, 225, 255)
+            paint.setShadowLayer(13f*d, 0f, 0f, if (orb.isFolder) Color.rgb(40, 145, 255) else Color.rgb(35, 205, 255))
+            c.drawCircle(orb.x, orb.y, r - 1.8f*d, paint)
+            paint.clearShadowLayer()
+            paint.strokeWidth = 1.3f*d
+            paint.color = Color.argb(245, 225, 250, 255)
+            c.drawCircle(orb.x, orb.y, r - 4.2f*d, paint)
             paint.style = Paint.Style.FILL
             // Small specular glint gives the sphere a polished glass finish.
             paint.shader = LinearGradient(orb.x-r*.55f, orb.y-r*.72f, orb.x+r*.12f, orb.y-r*.20f,
@@ -971,12 +975,7 @@ class MainActivity : Activity() {
                 val clipSave = c.save()
                 c.clipPath(Path().apply { addCircle(cx, cy, radius, Path.Direction.CW) })
                 c.drawBitmap(app.icon, null, RectF(cx-radius, cy-radius, cx+radius, cy+radius), paint)
-                paint.shader = LinearGradient(cx-radius, cy-radius, cx+radius, cy+radius,
-                    intArrayOf(Color.argb(58, 255, 255, 255),
-                        Color.argb(18, Color.red(tint), Color.green(tint), Color.blue(tint)),
-                        Color.argb(78, Color.red(deep), Color.green(deep), Color.blue(deep))),
-                    null, Shader.TileMode.CLAMP)
-                c.drawRect(cx-radius, cy-radius, cx+radius, cy+radius, paint)
+                // Keep the launcher-provided dock icon colors untouched.
                 paint.shader = null
                 c.restoreToCount(clipSave)
                 paint.style = Paint.Style.STROKE
@@ -1085,7 +1084,7 @@ class MainActivity : Activity() {
                 }
             }
             // Keep collisions from gradually making the calm drift too fast.
-            val maxSpeed = 78f*d
+            val maxSpeed = 138f*d
             active.forEach { orb ->
                 val speed = hypot(orb.vx, orb.vy)
                 if (speed > maxSpeed) {
@@ -1100,7 +1099,10 @@ class MainActivity : Activity() {
             if (app.launchUrl != null) {
                 startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(app.launchUrl)))
             } else {
-                packageManager.getLaunchIntentForPackage(app.packageName)?.let { startActivity(it) }
+                packageManager.getLaunchIntentForPackage(app.packageName)?.let { intent ->
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+                    startActivity(intent)
+                }
             }
         }
 
@@ -1444,12 +1446,21 @@ class MainActivity : Activity() {
                             byPackage[packageName]?.let(entries::add)
                         }
                     }
+                    val savedFolderName = item.optString("folderName","Папка")
+                    // Restore all nine reference apps in folder 27 if an older build
+                    // persisted only the preview subset.
+                    if (savedFolderName == "27") {
+                        val referenceFolder = orbs.firstOrNull { it.isFolder && it.folderName == "27" }
+                        referenceFolder?.apps?.forEach { app ->
+                            if (entries.none { it.packageName == app.packageName }) entries.add(app)
+                        }
+                    }
                     if (entries.isNotEmpty()) restored += Orb(
                         entries,
                         item.optDouble("x",.5).toFloat()*width,
                         item.optDouble("y",.3).toFloat()*height,
                         page=item.optInt("page",0).coerceIn(0,2),
-                        folderName=item.optString("folderName","Папка"),
+                        folderName=savedFolderName,
                         forceFolder=item.optBoolean("isFolder", entries.size > 1)
                     )
                 }
