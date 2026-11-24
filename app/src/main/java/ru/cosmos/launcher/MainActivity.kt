@@ -448,6 +448,14 @@ class MainActivity : Activity() {
         private fun showAddAppDialog() {
             val placed = (dock.map { it.packageName } + orbs.flatMap { it.apps }.map { it.packageName }).toSet()
             val available = allApps.filter { it.packageName !in placed }.toMutableList()
+            if (available.isEmpty()) {
+                AlertDialog.Builder(this@MainActivity, android.R.style.Theme_Material_Dialog_Alert)
+                    .setTitle("Орбита заполнена")
+                    .setMessage("Все установленные приложения уже размещены. Новые приложения появятся здесь автоматически после установки.")
+                    .setPositiveButton("ПОНЯТНО", null)
+                    .show()
+                return
+            }
             val density = d
             val panel = LinearLayout(this@MainActivity).apply {
                 orientation = LinearLayout.VERTICAL
