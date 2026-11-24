@@ -19,10 +19,18 @@ import org.json.JSONObject
 import kotlin.math.*
 
 class MainActivity : Activity() {
+    private var cosmosField: CosmosField? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN)
-        setContentView(CosmosField())
+        cosmosField = CosmosField()
+        setContentView(cosmosField)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        cosmosField?.refreshInstalledApps()
     }
 
     private data class AppEntry(val title: String, val packageName: String, val icon: Bitmap, val launchUrl: String? = null)
@@ -87,20 +95,24 @@ class MainActivity : Activity() {
             loadApps()
         }
 
-        private fun loadApps() {
+        private fun queryInstalledApps(): List<AppEntry> {
             val query = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-            packageManager.queryIntentActivities(query, 0)
+            return packageManager.queryIntentActivities(query, 0)
                 .filter { it.activityInfo.packageName != packageName }
                 .distinctBy { it.activityInfo.packageName }
-                .sortedBy { it.loadLabel(packageManager).toString().lowercase() }
-                .forEach { info ->
-                    allApps += AppEntry(
+                .map { info ->
+                    AppEntry(
                         info.loadLabel(packageManager).toString(),
                         info.activityInfo.packageName,
                         drawableToBitmap(info.loadIcon(packageManager))
                     )
                 }
+                .sortedBy { it.title.lowercase() }
+        }
 
+        private fun loadApps() {
+            allApps.clear()
+            allApps.addAll(queryInstalledApps())
             val used = mutableSetOf<String>()
             fun find(vararg words: String): AppEntry? = allApps.firstOrNull { app ->
                 app.packageName !in used && words.any { word ->
@@ -210,6 +222,90 @@ class MainActivity : Activity() {
                 }
             }
         }
+        // Called whenever the launcher returns to the foreground. Newly installed
+        // apps become their own moving spheres; saved folders and positions are untouched.
+        fun refreshInstalledApps() {
+            if (!layoutRestored) return
+            val fresh = queryInstalledApps()
+            val freshByPackage = fresh.associateBy { it.packageName }
+            allApps.clear()
+            allApps.addAll(fresh)
+
+            val known = getSharedPreferences("cosmos_launcher", MODE_PRIVATE)
+                .getStringSet("known_packages", emptySet())?.toMutableSet() ?: mutableSetOf()
+            val placed = (dock.map { it.packageName } + orbs.flatMap { it.apps }.map { it.packageName }).toMutableSet()
+
+            // Refresh labels/icons for apps already present without changing their positions.
+            orbs.forEach { orb ->
+                for (i in orb.apps.indices) {
+                    val updated = freshByPackage[orb.apps[i].packageName]
+                    if (updated != null && orb.apps[i].launchUrl == null) orb.apps[i] = updated
+                }
+            }
+            for (i in dock.indices) freshByPackage[dock[i].packageName]?.let { dock[i] = it }
+
+            val newlyInstalled = fresh.filter { it.packageName !in known && it.packageName !in placed }
+            newlyInstalled.forEachIndexed { index, app ->
+                val count = orbs.count { it.page == currentPage }
+                val col = count % 4
+                val row = count / 4
+                val minY = 104f*d
+                val maxY = (height - 126f*d).coerceAtLeast(minY + 60f*d)
+                val x = (width * (0.13f + col * 0.245f)).coerceIn(34f*d, width - 34f*d)
+                val y = (minY + row * 76f*d + index * 9f*d).coerceIn(minY, maxY)
+                val angle = (app.packageName.hashCode() % 360) * (Math.PI / 180.0)
+                val speed = (38f + (index % 4) * 4f) * d
+                orbs += Orb(mutableListOf(app), x, y, cos(angle).toFloat()*speed,
+                    sin(angle).toFloat()*speed, page = currentPage)
+                placed += app.packageName
+            }
+            getSharedPreferences("cosmos_launcher", MODE_PRIVATE).edit()
+                .putStringSet("known_packages", fresh.map { it.packageName }.toSet())
+                .apply()
+            if (newlyInstalled.isNotEmpty()) saveLayout()
+            invalidate()
+        }
+
+        private fun saveKnownPackages() {
+            getSharedPreferences("cosmos_launcher", MODE_PRIVATE).edit()
+                .putStringSet("known_packages", allApps.map { it.packageName }.toSet())
+                .apply()
+        }
+
+        private fun showAddAppDialog() {
+            val placed = (dock.map { it.packageName } + orbs.flatMap { it.apps }.map { it.packageName }).toSet()
+            val available = allApps.filter { it.packageName !in placed }
+            if (available.isEmpty()) {
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle("Добавить приложение")
+                    .setMessage("Все установленные приложения уже размещены. Новые появятся здесь автоматически после установки.")
+                    .setPositiveButton("Понятно", null)
+                    .show()
+                return
+            }
+            val labels = available.map { it.title }.toTypedArray()
+            AlertDialog.Builder(this@MainActivity)
+                .setTitle("Добавить шар на экран")
+                .setItems(labels) { _, which ->
+                    val app = available[which]
+                    val count = orbs.count { it.page == currentPage }
+                    val col = count % 4
+                    val row = count / 4
+                    val minY = 104f*d
+                    val maxY = (height - 126f*d).coerceAtLeast(minY + 60f*d)
+                    val x = (width * (0.13f + col * 0.245f)).coerceIn(34f*d, width - 34f*d)
+                    val y = (minY + row * 76f*d).coerceIn(minY, maxY)
+                    val angle = (app.packageName.hashCode() % 360) * (Math.PI / 180.0)
+                    val speed = 42f*d
+                    orbs += Orb(mutableListOf(app), x, y, cos(angle).toFloat()*speed,
+                        sin(angle).toFloat()*speed, page = currentPage)
+                    saveLayout()
+                    invalidate()
+                }
+                .setNegativeButton("Отмена", null)
+                .show()
+        }
+
         private fun drawableToBitmap(drawable: Drawable): Bitmap {
             val size = (96 * d).toInt().coerceAtLeast(64)
             return Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888).also {
@@ -408,6 +504,17 @@ class MainActivity : Activity() {
             paint.typeface = Typeface.create("sans-serif", Typeface.NORMAL)
             paint.textSize = 13f * d
             c.drawText("Поиск Google", left + 43f * d, iconY + 4.5f * d, paint)
+
+            // A small plus opens the installed-app picker.
+            val plusX = right - 25f*d
+            paint.color = Color.argb(225, 235, 246, 255)
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = 2f*d
+            paint.strokeCap = Paint.Cap.ROUND
+            c.drawCircle(plusX, iconY, 12f*d, paint)
+            c.drawLine(plusX-5f*d, iconY, plusX+5f*d, iconY, paint)
+            c.drawLine(plusX, iconY-5f*d, plusX, iconY+5f*d, paint)
+            paint.style = Paint.Style.FILL
         }
 
         private fun drawWeatherWidget(c: Canvas) {
@@ -690,7 +797,7 @@ class MainActivity : Activity() {
                         return true
                     }
                     if (e.y in 20f*d..68f*d && e.x in 22f*d..(width-22f*d)) {
-                        openGoogleSearch()
+                        if (e.x >= width - 58f*d) showAddAppDialog() else openGoogleSearch()
                         return true
                     }
                     val dockTop=height-76f*d
@@ -854,6 +961,7 @@ class MainActivity : Activity() {
             // auto-sorted launcher. After this, the user's own folder edits are preserved.
             if (prefs.getInt("layout_version", 0) < 2 || raw == null) {
                 saveLayout()
+                saveKnownPackages()
                 return
             }
             try {
@@ -890,6 +998,7 @@ class MainActivity : Activity() {
                 orbs.clear()
                 orbs.addAll(restored)
                 // Keep the four explicitly selected dock apps; never replace them alphabetically.
+                saveKnownPackages()
             } catch (_: Exception) { }
         }
 
