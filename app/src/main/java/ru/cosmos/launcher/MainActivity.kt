@@ -128,7 +128,8 @@ class MainActivity : Activity() {
                 drawPageIndicator(canvas)
                 drawDock(canvas)
             }
-            postInvalidateOnAnimation()
+            // The open-folder screen is static; redraw only after touch events.
+            if (openedFolder == null) postInvalidateOnAnimation()
         }
 
         private fun drawStars(c: Canvas) {
@@ -295,10 +296,10 @@ class MainActivity : Activity() {
                 orb.x += orb.vx*dt
                 orb.y += orb.vy*dt
                 if (orb.x < edge+r || orb.x > width-edge-r) {
-                    orb.vx=-orb.vx; orb.x=orb.x.coerceIn(edge+r,width-edge-r)
+                    orb.vx=-orb.vx*.96f; orb.x=orb.x.coerceIn(edge+r,width-edge-r)
                 }
                 if (orb.y < 42f*d+r || orb.y > bottom-r) {
-                    orb.vy=-orb.vy; orb.y=orb.y.coerceIn(42f*d+r,bottom-r)
+                    orb.vy=-orb.vy*.96f; orb.y=orb.y.coerceIn(42f*d+r,bottom-r)
                 }
             }
             for (i in active.indices) for (j in i+1 until active.size) {
@@ -315,6 +316,16 @@ class MainActivity : Activity() {
                         a.vx+=impulse*nx; a.vy+=impulse*ny
                         b.vx-=impulse*nx; b.vy-=impulse*ny
                     }
+                }
+            }
+            // Keep collisions from gradually making the calm drift too fast.
+            val maxSpeed = 42f*d
+            active.forEach { orb ->
+                val speed = hypot(orb.vx, orb.vy)
+                if (speed > maxSpeed) {
+                    val scale = maxSpeed / speed
+                    orb.vx *= scale
+                    orb.vy *= scale
                 }
             }
         }
