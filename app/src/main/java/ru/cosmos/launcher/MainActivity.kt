@@ -294,15 +294,35 @@ class MainActivity : Activity() {
                 groups.forEach { words -> take(*words.toTypedArray())?.let(members::add) }
                 if (members.isNotEmpty()) orbs += Orb(members, page = page, folderName = name, forceFolder = true)
             }
-            fun pin(vararg words: String) {
-                take(*words)?.let(dock::add)
+            // The dock is a fixed four-slot set. Resolve it once, then keep the
+            // exact package order in preferences so newly installed apps never replace it.
+            val dockPrefs = getSharedPreferences("cosmos_launcher", MODE_PRIVATE)
+            val savedDock = dockPrefs.getString("dock_packages", null)
+            if (!savedDock.isNullOrBlank()) {
+                savedDock.split("|").forEach { pkg ->
+                    allApps.firstOrNull { it.packageName == pkg }?.let(dock::add)
+                }
+            } else {
+                fun normalized(value: String) = value.lowercase().replace(" ", "").replace("_", "")
+                fun pin(labelAliases: List<String>, packageAliases: List<String>) {
+                    val labels = labelAliases.map(::normalized).toSet()
+                    val packages = packageAliases.toSet()
+                    allApps.firstOrNull {
+                        normalized(it.title) in labels || it.packageName in packages
+                    }?.let(dock::add)
+                }
+                pin(listOf("Телефон", "Phone", "Dialer"), listOf(
+                    "com.google.android.dialer", "com.android.dialer", "com.huawei.contacts"
+                ))
+                pin(listOf("Сообщения", "Messages", "SMS"), listOf(
+                    "com.google.android.apps.messaging", "com.android.mms", "com.huawei.message"
+                ))
+                pin(listOf("Chrome"), listOf("com.android.chrome"))
+                pin(listOf("Галерея", "Gallery", "Photos"), listOf(
+                    "com.huawei.photos", "com.android.gallery3d", "com.google.android.apps.photos"
+                ))
+                dockPrefs.edit().putString("dock_packages", dock.joinToString("|") { it.packageName }).apply()
             }
-
-            // Fixed dock order from the reference screen.
-            pin("телефон", "phone", "dialer")
-            pin("сообщения", "messages", "messaging")
-            pin("chrome")
-            pin("галерея", "gallery", "photos")
 
             // Desktop 1: the exact folder names and independent shortcuts from the reference.
             addApp(0, "cosmos notes", "cosmosnotes")
@@ -379,13 +399,8 @@ class MainActivity : Activity() {
             }
             orbs += Orb(mutableListOf(bookmark("Шантарж", "https://shahmaty-mistikov.tuqo.app/#steps")), page = 2)
             orbs += Orb(mutableListOf(bookmark("CosmosA27", "https://cosmos27.netlify.app/")), page = 2)
-            // Keep any apps not recognized by the reference layout available rather than hiding them.
-            allApps.filter { it.packageName !in used }.forEach { app ->
-                if (app.packageName !in dock.map { it.packageName }) {
-                    orbs += Orb(mutableListOf(app), page = 1)
-                    used += app.packageName
-                }
-            }
+            // Unmatched installed apps stay available in the "+" app picker.
+            // Never dump the entire unrecognized app list onto desktop 2.
         }
         // Called whenever the launcher returns to the foreground. Newly installed
         // apps become their own moving spheres; saved folders and positions are untouched.
@@ -403,7 +418,8 @@ class MainActivity : Activity() {
                 orb.apps.removeAll { it.launchUrl == null && it.packageName !in freshByPackage }
             }
             orbs.removeAll { it.apps.isEmpty() }
-            dock.removeAll { it.packageName !in freshByPackage }
+            // Keep dock slots and their order even if an app is temporarily unavailable.
+            // A newly installed app must never take over an existing dock position.
             known.retainAll(freshByPackage.keys)
 
             val placed = (dock.map { it.packageName } + orbs.flatMap { it.apps }.map { it.packageName }).toMutableSet()
@@ -1247,6 +1263,23 @@ class MainActivity : Activity() {
                     return true
                 }
                 MotionEvent.ACTION_MOVE -> {
+                    // Page swipes have priority over orb selection. This allows
+                    // switching desktops even when the finger starts on a moving sphere.
+                    if (openedFolder == null && !swipeHandled &&
+                        abs(e.x - downX) > 55f*d && abs(e.x - downX) > abs(e.y - downY)) {
+                        touchHandler.removeCallbacks(longPressAction)
+                        selected = null
+                        dragging = false
+                        moved = true
+                        currentPage = (currentPage + if (e.x < downX) 1 else -1).coerceIn(0, 2)
+                        getSharedPreferences("cosmos_launcher", MODE_PRIVATE).edit()
+                            .putInt("current_page", currentPage).apply()
+                        swipeHandled = true
+                        lastX = e.x
+                        lastY = e.y
+                        invalidate()
+                        return true
+                    }
                     if (openedFolder != null) {
                         if (abs(e.y-folderDownY)>8f*d) {
                             folderTouchMoved=true
@@ -1288,11 +1321,6 @@ class MainActivity : Activity() {
                             orb.x=orb.x.coerceIn(orb.radius*d+4f*d,width-orb.radius*d-4f*d)
                             orb.y=orb.y.coerceIn(88f*d+orb.radius*d,height-112f*d-orb.radius*d)
                         }
-                    } else if (!swipeHandled && abs(e.x-downX)>55f*d && abs(e.x-downX)>abs(e.y-downY)) {
-                        currentPage=(currentPage + if (e.x<downX) 1 else -1).coerceIn(0,2)
-                        getSharedPreferences("cosmos_launcher", MODE_PRIVATE).edit()
-                            .putInt("current_page", currentPage).apply()
-                        swipeHandled=true
                     }
                     lastX=e.x; lastY=e.y
                     invalidate(); return true
@@ -1379,18 +1407,19 @@ class MainActivity : Activity() {
             }
             getSharedPreferences("cosmos_launcher", MODE_PRIVATE).edit()
                 .putString("layout",array.toString())
-                .putInt("layout_version", 2)
+                .putInt("layout_version", 3)
                 .putInt("current_page", currentPage)
                 .apply()
         }
 
         private fun restoreLayout() {
             val prefs = getSharedPreferences("cosmos_launcher", MODE_PRIVATE)
-            currentPage = prefs.getInt("current_page", 0).coerceIn(0, 2)
+            val savedVersion = prefs.getInt("layout_version", 0)
+            currentPage = if (savedVersion < 3) 0 else prefs.getInt("current_page", 0).coerceIn(0, 2)
             val raw = prefs.getString("layout", null)
-            // Rebuild the first reference-based layout once when upgrading from the old
-            // auto-sorted launcher. After this, the user's own folder edits are preserved.
-            if (prefs.getInt("layout_version", 0) < 2 || raw == null) {
+            // Version 3 rebuilds the reference desktops once: earlier builds could
+            // scatter every unmatched installed app across desktop 2.
+            if (savedVersion < 3 || raw == null) {
                 saveLayout()
                 saveKnownPackages()
                 return
