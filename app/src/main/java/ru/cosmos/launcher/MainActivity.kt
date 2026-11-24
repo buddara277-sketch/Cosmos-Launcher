@@ -42,7 +42,7 @@ class MainActivity : Activity() {
         window.setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN)
         root = FrameLayout(this)
         cosmosField = CosmosField()
-        root.addView(cosmosField, FrameLayout.LayoutParams(
+        root.addView(cosmosField!!, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
         ))
         widgetManager = AppWidgetManager.getInstance(this)
@@ -78,7 +78,7 @@ class MainActivity : Activity() {
     private fun showWidget(info: AppWidgetProviderInfo) {
         val view = widgetHost.createView(this, meteoredWidgetId, info)
         view.setAppWidget(meteoredWidgetId, info)
-        meteoredWidgetView?.let(root::removeView)
+        meteoredWidgetView?.let { oldView -> root.removeView(oldView) }
         meteoredWidgetView = view
         root.addView(view, FrameLayout.LayoutParams(1, 1))
         cosmosField?.invalidate()
