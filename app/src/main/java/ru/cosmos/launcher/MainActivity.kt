@@ -839,6 +839,7 @@ class MainActivity : Activity() {
             }
             getSharedPreferences("cosmos_launcher", MODE_PRIVATE).edit()
                 .putString("layout",array.toString())
+                .putInt("layout_version", 2)
                 .putInt("current_page", currentPage)
                 .apply()
         }
@@ -846,7 +847,13 @@ class MainActivity : Activity() {
         private fun restoreLayout() {
             val prefs = getSharedPreferences("cosmos_launcher", MODE_PRIVATE)
             currentPage = prefs.getInt("current_page", 0).coerceIn(0, 2)
-            val raw = prefs.getString("layout", null) ?: return
+            val raw = prefs.getString("layout", null)
+            // Rebuild the first reference-based layout once when upgrading from the old
+            // auto-sorted launcher. After this, the user's own folder edits are preserved.
+            if (prefs.getInt("layout_version", 0) < 2 || raw == null) {
+                saveLayout()
+                return
+            }
             try {
                 val saved=JSONArray(raw)
                 val byPackage=(allApps + orbs.flatMap { it.apps }.filter { it.launchUrl != null }).associateBy { it.packageName }
