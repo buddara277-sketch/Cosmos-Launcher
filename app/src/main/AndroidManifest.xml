@@ -1,6 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <queries>
         <intent><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent>
+        <intent><action android:name="android.intent.action.DIAL"/></intent>
+        <intent><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.APP_MESSAGING"/></intent>
+        <intent><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.APP_GALLERY"/></intent>
+        <intent><action android:name="android.intent.action.GET_CONTENT"/><data android:mimeType="image/*"/></intent>
     </queries>
     <application android:allowBackup="false" android:label="Cosmos Launcher" android:theme="@android:style/Theme.Material.NoActionBar">
         <activity android:name=".MainActivity" android:exported="true" android:screenOrientation="portrait">
