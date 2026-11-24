@@ -299,7 +299,7 @@ class MainActivity : Activity() {
             paint.textAlign = Paint.Align.LEFT
             paint.typeface = Typeface.create("sans-serif", Typeface.NORMAL)
             paint.textSize = 13f * d
-            c.drawText("Поиск приложений", left + 43f * d, iconY + 4.5f * d, paint)
+            c.drawText("Поиск Google", left + 43f * d, iconY + 4.5f * d, paint)
         }
 
         private fun drawDeletePill(c: Canvas) {
@@ -632,12 +632,13 @@ class MainActivity : Activity() {
                     if (entries.isNotEmpty()) restored += Orb(entries, item.optDouble("x",.5).toFloat()*width,
                         item.optDouble("y",.3).toFloat()*height, page=item.optInt("page",0).coerceIn(0,2))
                 }
-                if (restored.isNotEmpty()) {
-                    orbs.clear(); orbs.addAll(restored)
-                    // Keep the original five pinned apps in the dock after restoring folders/layout.
-                    dock.clear()
-                    dock.addAll(allApps.take(5))
-                }
+                // An explicitly saved empty array means the user removed every desktop orb.
+                // Restore it as empty instead of recreating the default app layout.
+                orbs.clear()
+                orbs.addAll(restored)
+                // Keep the original five pinned apps in the dock after restoring folders/layout.
+                dock.clear()
+                dock.addAll(allApps.take(5))
             } catch (_: Exception) { }
         }
 
