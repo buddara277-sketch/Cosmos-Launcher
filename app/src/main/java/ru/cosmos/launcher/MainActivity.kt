@@ -36,6 +36,7 @@ class MainActivity : Activity() {
         private val d = resources.displayMetrics.density
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         private val orbs = mutableListOf<Orb>()
+        private val allApps = mutableListOf<AppEntry>()
         private val dock = mutableListOf<AppEntry>()
         private var currentPage = 0
         private var openedFolder: Orb? = null
@@ -46,6 +47,9 @@ class MainActivity : Activity() {
         private var lastX = 0f
         private var lastY = 0f
         private var moved = false
+        private var dragging = false
+        private var dragOffsetX = 0f
+        private var dragOffsetY = 0f
         private var swipeHandled = false
         private var initialized = false
         private var layoutRestored = false
@@ -61,16 +65,20 @@ class MainActivity : Activity() {
                 .filter { it.activityInfo.packageName != packageName }
                 .distinctBy { it.activityInfo.packageName }
                 .sortedBy { it.loadLabel(packageManager).toString().lowercase() }
-                .take(45)
+                .take(41)
             apps.forEach { info ->
                 val entry = AppEntry(
                     info.loadLabel(packageManager).toString(),
                     info.activityInfo.packageName,
                     drawableToBitmap(info.loadIcon(packageManager))
                 )
-                orbs += Orb(mutableListOf(entry), page = (orbs.size / 12).coerceAtMost(2))
+                allApps += entry
             }
-            dock.addAll(orbs.take(5).map { it.apps.first() })
+            // Five pinned apps live only in the fixed dock, never duplicated on the desktops.
+            dock.addAll(allApps.take(5))
+            allApps.drop(5).forEachIndexed { index, entry ->
+                orbs += Orb(mutableListOf(entry), page = index / 12)
+            }
         }
 
         private fun drawableToBitmap(drawable: Drawable): Bitmap {
@@ -319,7 +327,7 @@ class MainActivity : Activity() {
             when (e.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     downX=e.x; downY=e.y; lastX=e.x; lastY=e.y
-                    moved=false; swipeHandled=false
+                    moved=false; dragging=false; swipeHandled=false
                     if (openedFolder != null) {
                         val folder=openedFolder!!
                         val box=RectF(22f*d,height*.19f,width-22f*d,height*.78f)
@@ -339,13 +347,24 @@ class MainActivity : Activity() {
                     selected=orbs.asReversed().firstOrNull {
                         it.page==currentPage && hypot(e.x-it.x,e.y-it.y)<it.radius*d+14f*d
                     }
+                    selected?.let {
+                        dragOffsetX = it.x - e.x
+                        dragOffsetY = it.y - e.y
+                    }
                     return true
                 }
                 MotionEvent.ACTION_MOVE -> {
                     if (selected != null) {
                         val orb=selected!!
-                        if (hypot(e.x-downX,e.y-downY)>8f*d) moved=true
-                        orb.x=e.x; orb.y=e.y; orb.vx=0f; orb.vy=0f
+                        if (!dragging && hypot(e.x-downX,e.y-downY)>9f*d) {
+                            dragging=true
+                            moved=true
+                        }
+                        if (dragging) {
+                            orb.x=e.x+dragOffsetX
+                            orb.y=e.y+dragOffsetY
+                            orb.vx=0f; orb.vy=0f
+                        }
                     } else if (!swipeHandled && abs(e.x-downX)>55f*d && abs(e.x-downX)>abs(e.y-downY)) {
                         currentPage=(currentPage + if (e.x<downX) 1 else -1).coerceIn(0,2)
                         getSharedPreferences("cosmos_launcher", MODE_PRIVATE).edit()
@@ -373,8 +392,8 @@ class MainActivity : Activity() {
                                 target.vx*=.65f; target.vy*=.65f
                             } else {
                                 // A small release impulse avoids sudden fast launches.
-                                dragged.vx=((e.x-downX)*.16f).coerceIn(-42f*d,42f*d)
-                                dragged.vy=((e.y-downY)*.16f).coerceIn(-42f*d,42f*d)
+                                dragged.vx=((e.x-downX)*.10f).coerceIn(-30f*d,30f*d)
+                                dragged.vy=((e.y-downY)*.10f).coerceIn(-30f*d,30f*d)
                             }
                             saveLayout()
                         } else if (dragged.isFolder) {
@@ -413,7 +432,7 @@ class MainActivity : Activity() {
             val raw = prefs.getString("layout", null) ?: return
             try {
                 val saved=JSONArray(raw)
-                val byPackage=orbs.flatMap { it.apps }.associateBy { it.packageName }
+                val byPackage=allApps.associateBy { it.packageName }
                 val restored=mutableListOf<Orb>()
                 for (i in 0 until saved.length()) {
                     val item=saved.getJSONObject(i)
@@ -425,7 +444,9 @@ class MainActivity : Activity() {
                 }
                 if (restored.isNotEmpty()) {
                     orbs.clear(); orbs.addAll(restored)
-                    dock.clear(); dock.addAll(orbs.flatMap { it.apps }.distinctBy { it.packageName }.take(5))
+                    // Keep the original five pinned apps in the dock after restoring folders/layout.
+                    dock.clear()
+                    dock.addAll(allApps.take(5))
                 }
             } catch (_: Exception) { }
         }
