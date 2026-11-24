@@ -48,11 +48,11 @@ class MainActivity : Activity() {
         private var moved = false
         private var swipeHandled = false
         private var initialized = false
+        private var layoutRestored = false
 
         init {
             isClickable = true
             loadApps()
-            restoreLayout()
         }
 
         private fun loadApps() {
@@ -97,6 +97,10 @@ class MainActivity : Activity() {
                     orb.vx = cos(angle) * 32f * d
                     orb.vy = sin(angle) * 32f * d
                 }
+            }
+            if (!layoutRestored) {
+                layoutRestored = true
+                restoreLayout()
             }
         }
 
