@@ -10,12 +10,22 @@ import android.content.Intent
 import android.graphics.*
 import android.net.Uri
 import android.graphics.drawable.Drawable
+import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.MotionEvent
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.TextView
+import android.widget.ImageView
+import android.widget.ListView
+import android.widget.BaseAdapter
+import android.view.Gravity
+import android.text.TextWatcher
+import android.text.Editable
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -437,36 +447,128 @@ class MainActivity : Activity() {
 
         private fun showAddAppDialog() {
             val placed = (dock.map { it.packageName } + orbs.flatMap { it.apps }.map { it.packageName }).toSet()
-            val available = allApps.filter { it.packageName !in placed }
-            if (available.isEmpty()) {
-                AlertDialog.Builder(this@MainActivity)
-                    .setTitle("Добавить приложение")
-                    .setMessage("Все установленные приложения уже размещены. Новые появятся здесь автоматически после установки.")
-                    .setPositiveButton("Понятно", null)
-                    .show()
-                return
-            }
-            val labels = available.map { it.title }.toTypedArray()
-            AlertDialog.Builder(this@MainActivity)
-                .setTitle("Добавить шар на экран")
-                .setItems(labels) { _, which ->
-                    val app = available[which]
-                    val count = orbs.count { it.page == currentPage }
-                    val col = count % 4
-                    val row = count / 4
-                    val minY = 104f*d
-                    val maxY = (height - 126f*d).coerceAtLeast(minY + 60f*d)
-                    val x = (width * (0.13f + col * 0.245f)).coerceIn(34f*d, width - 34f*d)
-                    val y = (minY + row * 76f*d).coerceIn(minY, maxY)
-                    val angle = (app.packageName.hashCode() % 360) * (Math.PI / 180.0)
-                    val speed = 42f*d
-                    orbs += Orb(mutableListOf(app), x, y, cos(angle).toFloat()*speed,
-                        sin(angle).toFloat()*speed, page = currentPage)
-                    saveLayout()
-                    invalidate()
+            val available = allApps.filter { it.packageName !in placed }.toMutableList()
+            val density = d
+            val panel = LinearLayout(this@MainActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding((20*density).toInt(), (18*density).toInt(), (20*density).toInt(), (14*density).toInt())
+                background = GradientDrawable(
+                    GradientDrawable.Orientation.TL_BR,
+                    intArrayOf(Color.rgb(22, 38, 70), Color.rgb(9, 18, 42), Color.rgb(18, 29, 58))
+                ).apply {
+                    cornerRadius = 28*density
+                    setStroke((1*density).toInt(), Color.argb(105, 170, 215, 255))
                 }
-                .setNegativeButton("Отмена", null)
-                .show()
+            }
+            val heading = TextView(this@MainActivity).apply {
+                text = "ДОБАВИТЬ НА ОРБИТУ"
+                setTextColor(Color.WHITE)
+                textSize = 17f
+                typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+                letterSpacing = .08f
+                setPadding(2, 0, 0, (5*density).toInt())
+            }
+            val subtitle = TextView(this@MainActivity).apply {
+                text = "Выбери приложение — оно появится отдельной сферой"
+                setTextColor(Color.rgb(166, 194, 230))
+                textSize = 12f
+                setPadding(2, 0, 0, (14*density).toInt())
+            }
+            val search = EditText(this@MainActivity).apply {
+                hint = "Найти приложение"
+                setSingleLine(true)
+                textSize = 14f
+                setTextColor(Color.WHITE)
+                setHintTextColor(Color.rgb(145, 169, 204))
+                setPadding((15*density).toInt(), 0, (15*density).toInt(), 0)
+                background = GradientDrawable().apply {
+                    setColor(Color.argb(105, 105, 145, 205))
+                    cornerRadius = 18*density
+                    setStroke((1*density).toInt(), Color.argb(90, 190, 220, 255))
+                }
+            }
+            val list = ListView(this@MainActivity).apply {
+                divider = ColorDrawable(Color.argb(35, 190, 220, 255))
+                dividerHeight = (1*density).toInt()
+                setPadding(0, (8*density).toInt(), 0, 0)
+                isVerticalScrollBarEnabled = false
+                setBackgroundColor(Color.TRANSPARENT)
+            }
+            val adapter = object : BaseAdapter() {
+                private var shown = available.toList()
+                fun filter(query: String) {
+                    shown = available.filter { it.title.contains(query, true) || it.packageName.contains(query, true) }
+                    notifyDataSetChanged()
+                }
+                fun item(position: Int) = shown[position]
+                override fun getCount() = shown.size
+                override fun getItem(position: Int) = shown[position]
+                override fun getItemId(position: Int) = shown[position].packageName.hashCode().toLong()
+                override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
+                    val app = shown[position]
+                    val row = (convertView as? LinearLayout) ?: LinearLayout(this@MainActivity).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                        setPadding((8*density).toInt(), (9*density).toInt(), (8*density).toInt(), (9*density).toInt())
+                    }
+                    row.removeAllViews()
+                    val icon = ImageView(this@MainActivity).apply {
+                        setImageBitmap(app.icon)
+                        scaleType = ImageView.ScaleType.FIT_CENTER
+                    }
+                    row.addView(icon, LinearLayout.LayoutParams((42*density).toInt(), (42*density).toInt()))
+                    val name = TextView(this@MainActivity).apply {
+                        text = app.title
+                        setTextColor(Color.WHITE)
+                        textSize = 14f
+                        typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                        setPadding((14*density).toInt(), 0, 0, 0)
+                    }
+                    row.addView(name, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                    val plus = TextView(this@MainActivity).apply {
+                        text = "+"
+                        textSize = 25f
+                        setTextColor(Color.rgb(132, 205, 255))
+                        gravity = Gravity.CENTER
+                    }
+                    row.addView(plus, LinearLayout.LayoutParams((34*density).toInt(), (42*density).toInt()))
+                    return row
+                }
+            }
+            list.adapter = adapter
+            search.addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { adapter.filter(s?.toString().orEmpty()) }
+                override fun afterTextChanged(s: Editable?) {}
+            })
+            panel.addView(heading)
+            panel.addView(subtitle)
+            panel.addView(search, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (48*density).toInt()))
+            panel.addView(list, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (390*density).toInt()))
+            val dialog = AlertDialog.Builder(this@MainActivity, android.R.style.Theme_Material_Dialog_Alert)
+                .setView(panel)
+                .setNegativeButton("ЗАКРЫТЬ", null)
+                .create()
+            list.setOnItemClickListener { _, _, position, _ ->
+                val app = adapter.item(position)
+                val count = orbs.count { it.page == currentPage }
+                val col = count % 4
+                val row = count / 4
+                val minY = 104f*d
+                val maxY = (height - 126f*d).coerceAtLeast(minY + 60f*d)
+                val x = (width * (0.13f + col * 0.245f)).coerceIn(34f*d, width - 34f*d)
+                val y = (minY + row * 76f*d).coerceIn(minY, maxY)
+                val angle = (app.packageName.hashCode() % 360) * (Math.PI / 180.0)
+                val speed = 48f*d
+                orbs += Orb(mutableListOf(app), x, y, cos(angle).toFloat()*speed,
+                    sin(angle).toFloat()*speed, page = currentPage)
+                saveLayout()
+                dialog.dismiss()
+                invalidate()
+            }
+            dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            dialog.show()
+            dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
         }
 
         private fun drawableToBitmap(drawable: Drawable): Bitmap {
@@ -503,7 +605,17 @@ class MainActivity : Activity() {
         }
 
         override fun onDraw(canvas: Canvas) {
-            canvas.drawColor(Color.rgb(5, 9, 27))
+            canvas.drawColor(Color.rgb(4, 8, 24))
+            paint.style = Paint.Style.FILL
+            paint.shader = LinearGradient(0f, 0f, width.toFloat(), height.toFloat(),
+                intArrayOf(Color.rgb(8, 18, 43), Color.rgb(5, 10, 29), Color.rgb(12, 12, 38)),
+                null, Shader.TileMode.CLAMP)
+            canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
+            paint.shader = null
+            paint.setShadowLayer(55f*d, width*.78f, height*.24f, Color.argb(38, 75, 110, 255))
+            paint.color = Color.argb(18, 80, 115, 255)
+            canvas.drawCircle(width*.78f, height*.24f, width*.48f, paint)
+            paint.clearShadowLayer()
             drawStars(canvas)
             syncMeteoredWidgetView()
             if (openedFolder != null) {
@@ -542,6 +654,12 @@ class MainActivity : Activity() {
             val base = Color.HSVToColor(floatArrayOf(hue, .48f, .92f))
             val deep = Color.HSVToColor(floatArrayOf(hue, .72f, .38f))
 
+            // A soft halo makes each app feel like a luminous glass object.
+            paint.style = Paint.Style.FILL
+            paint.setShadowLayer(15f*d, 0f, 0f, Color.argb(115, Color.red(base), Color.green(base), Color.blue(base)))
+            paint.color = Color.argb(70, Color.red(base), Color.green(base), Color.blue(base))
+            c.drawCircle(orb.x, orb.y, r+2f*d, paint)
+            paint.clearShadowLayer()
             val spherePath = Path().apply {
                 addCircle(orb.x, orb.y, r, Path.Direction.CW)
             }
@@ -740,16 +858,35 @@ class MainActivity : Activity() {
         }
 
         private fun drawDeletePill(c: Canvas) {
-            val w = 124f*d
-            val h = 38f*d
+            val w = 150f*d
+            val h = 48f*d
             deletePill.set((width-w)/2f, 18f*d, (width+w)/2f, 18f*d+h)
-            paint.color = Color.argb(235, 155, 42, 58)
-            c.drawRoundRect(deletePill, 22f*d, 22f*d, paint)
+            paint.style = Paint.Style.FILL
+            paint.setShadowLayer(18f*d, 0f, 4f*d, Color.argb(150, 255, 65, 105))
+            paint.shader = LinearGradient(deletePill.left, deletePill.top, deletePill.right, deletePill.bottom,
+                intArrayOf(Color.argb(238, 190, 55, 91), Color.argb(220, 105, 28, 66)),
+                null, Shader.TileMode.CLAMP)
+            c.drawRoundRect(deletePill, 25f*d, 25f*d, paint)
+            paint.shader = null
+            paint.clearShadowLayer()
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = 1.1f*d
+            paint.color = Color.argb(210, 255, 210, 225)
+            c.drawRoundRect(deletePill, 25f*d, 25f*d, paint)
+            paint.style = Paint.Style.FILL
+            val cx = deletePill.centerX()
+            val cy = deletePill.centerY()
             paint.color = Color.WHITE
+            paint.strokeWidth = 1.8f*d
+            paint.strokeCap = Paint.Cap.ROUND
+            paint.style = Paint.Style.STROKE
+            c.drawLine(cx-38f*d, cy-5f*d, cx-28f*d, cy-5f*d, paint)
+            c.drawRoundRect(RectF(cx-35f*d, cy-3f*d, cx-29f*d, cy+7f*d), 1f*d, 1f*d, paint)
+            paint.style = Paint.Style.FILL
             paint.textAlign = Paint.Align.CENTER
             paint.typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
-            paint.textSize = 14f*d
-            c.drawText("Удалить", width/2f, deletePill.centerY()+5f*d, paint)
+            paint.textSize = 13f*d
+            c.drawText("УДАЛИТЬ", cx+15f*d, cy+4.5f*d, paint)
             paint.typeface = Typeface.DEFAULT
         }
 
@@ -763,8 +900,20 @@ class MainActivity : Activity() {
 
         private fun drawDock(c: Canvas) {
             val top = height - 76f*d
-            paint.color = Color.argb(125, 32, 47, 76)
-            c.drawRoundRect(12f*d, top, width-12f*d, height-9f*d, 24f*d, 24f*d, paint)
+            val dockRect = RectF(12f*d, top, width-12f*d, height-9f*d)
+            paint.style = Paint.Style.FILL
+            paint.setShadowLayer(16f*d, 0f, 3f*d, Color.argb(90, 75, 145, 255))
+            paint.shader = LinearGradient(dockRect.left, dockRect.top, dockRect.right, dockRect.bottom,
+                intArrayOf(Color.argb(172, 70, 100, 150), Color.argb(132, 18, 31, 61), Color.argb(160, 42, 65, 105)),
+                null, Shader.TileMode.CLAMP)
+            c.drawRoundRect(dockRect, 26f*d, 26f*d, paint)
+            paint.shader = null
+            paint.clearShadowLayer()
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = 1f*d
+            paint.color = Color.argb(125, 190, 220, 255)
+            c.drawRoundRect(dockRect, 26f*d, 26f*d, paint)
+            paint.style = Paint.Style.FILL
             val count = dock.size.coerceAtLeast(1)
             dock.forEachIndexed { i, app ->
                 val size = 43f*d
@@ -921,18 +1070,50 @@ class MainActivity : Activity() {
         }
 
         private fun openGoogleSearch() {
-            val input = EditText(this@MainActivity).apply {
-                hint = "Что ищем в Google?"
-                setSingleLine(true)
+            val panel = LinearLayout(this@MainActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding((22*d).toInt(), (20*d).toInt(), (22*d).toInt(), (12*d).toInt())
+                background = GradientDrawable(
+                    GradientDrawable.Orientation.TL_BR,
+                    intArrayOf(Color.rgb(24, 43, 78), Color.rgb(8, 17, 40))
+                ).apply {
+                    cornerRadius = 26*d
+                    setStroke((1*d).toInt(), Color.argb(115, 170, 215, 255))
+                }
+            }
+            val title = TextView(this@MainActivity).apply {
+                text = "ПОИСК ПО ВСЕЛЕННОЙ"
+                setTextColor(Color.WHITE)
                 textSize = 16f
-                setPadding((16f*d).toInt(), (12f*d).toInt(), (16f*d).toInt(), (12f*d).toInt())
+                letterSpacing = .07f
+                typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+                setPadding(0, 0, 0, (15*d).toInt())
+            }
+            val input = EditText(this@MainActivity).apply {
+                hint = "Что будем искать?"
+                setSingleLine(true)
+                textSize = 15f
+                setTextColor(Color.WHITE)
+                setHintTextColor(Color.rgb(155, 181, 218))
+                setPadding((16*d).toInt(), 0, (16*d).toInt(), 0)
+                background = GradientDrawable().apply {
+                    setColor(Color.argb(110, 105, 145, 205))
+                    cornerRadius = 17*d
+                    setStroke((1*d).toInt(), Color.argb(95, 190, 220, 255))
+                }
                 imeOptions = EditorInfo.IME_ACTION_SEARCH
             }
-            val dialog = AlertDialog.Builder(this@MainActivity)
-                .setTitle("Google")
-                .setView(input)
-                .setNegativeButton("Отмена", null)
-                .setPositiveButton("Найти") { _, _ ->
+            panel.addView(title)
+            panel.addView(input, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (52*d).toInt()))
+            val dialog = AlertDialog.Builder(this@MainActivity, android.R.style.Theme_Material_Dialog_Alert)
+                .setView(panel)
+                .setNegativeButton("ОТМЕНА", null)
+                .setPositiveButton("ИСКАТЬ", null)
+                .create()
+            dialog.setOnShowListener {
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(Color.rgb(120, 195, 255))
+                dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(Color.rgb(165, 190, 225))
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                     val query = input.text.toString().trim()
                     if (query.isNotEmpty()) {
                         val googleAppIntent = Intent(Intent.ACTION_WEB_SEARCH)
@@ -941,16 +1122,12 @@ class MainActivity : Activity() {
                         try {
                             startActivity(googleAppIntent)
                         } catch (_: Exception) {
-                            val browserIntent = Intent(
-                                Intent.ACTION_VIEW,
-                                Uri.parse("https://www.google.com/search?q=" + Uri.encode(query))
-                            )
-                            startActivity(browserIntent)
+                            startActivity(Intent(Intent.ACTION_VIEW,
+                                Uri.parse("https://www.google.com/search?q=" + Uri.encode(query))))
                         }
+                        dialog.dismiss()
                     }
                 }
-                .create()
-            dialog.setOnShowListener {
                 dialog.window?.setSoftInputMode(
                     WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE or
                         WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
@@ -958,6 +1135,7 @@ class MainActivity : Activity() {
                 input.requestFocus()
             }
             dialog.show()
+            dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
         }
 
         override fun onTouchEvent(e: MotionEvent): Boolean {
