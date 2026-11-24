@@ -4,18 +4,15 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.*
+import android.net.Uri
 import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.text.Editable
-import android.text.TextWatcher
 import android.view.MotionEvent
 import android.view.inputmethod.EditorInfo
-import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.LinearLayout
-import android.widget.ListView
 import android.view.View
 import android.view.WindowManager
 import org.json.JSONArray
@@ -432,75 +429,37 @@ class MainActivity : Activity() {
             packageManager.getLaunchIntentForPackage(app.packageName)?.let { startActivity(it) }
         }
 
-        private fun openAppSearch() {
+        private fun openGoogleSearch() {
             val input = EditText(this@MainActivity).apply {
-                hint = "Название приложения"
+                hint = "Что ищем в Google?"
                 singleLine = true
                 textSize = 16f
                 setPadding((16f*d).toInt(), (12f*d).toInt(), (16f*d).toInt(), (12f*d).toInt())
                 imeOptions = EditorInfo.IME_ACTION_SEARCH
             }
-            val results = ListView(this@MainActivity)
-            val matches = allApps.toMutableList()
-            val adapter = ArrayAdapter(
-                this@MainActivity,
-                android.R.layout.simple_list_item_1,
-                matches.map { it.title }.toMutableList()
-            )
-            results.adapter = adapter
-
-            val content = LinearLayout(this@MainActivity).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding((18f*d).toInt(), (8f*d).toInt(), (18f*d).toInt(), (8f*d).toInt())
-                addView(input, LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ))
-                addView(results, LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    (min(height * .52f, 420f*d)).toInt().coerceAtLeast((180f*d).toInt())
-                ))
-            }
-
             val dialog = AlertDialog.Builder(this@MainActivity)
-                .setTitle("Поиск приложений")
-                .setView(content)
-                .setNegativeButton("Закрыть", null)
+                .setTitle("Google")
+                .setView(input)
+                .setNegativeButton("Отмена", null)
+                .setPositiveButton("Найти") { _, _ ->
+                    val query = input.text.toString().trim()
+                    if (query.isNotEmpty()) {
+                        val searchIntent = Intent(
+                            Intent.ACTION_VIEW,
+                            Uri.parse("https://www.google.com/search?q=" + Uri.encode(query))
+                        )
+                        startActivity(searchIntent)
+                    }
+                }
                 .create()
-
-            fun refreshResults(query: String) {
-                val normalized = query.trim().lowercase()
-                val filtered = allApps.filter { normalized.isEmpty() || it.title.lowercase().contains(normalized) }
-                matches.clear()
-                matches.addAll(filtered)
-                adapter.clear()
-                adapter.addAll(filtered.map { it.title })
-                adapter.notifyDataSetChanged()
+            dialog.setOnShowListener {
+                dialog.window?.setSoftInputMode(
+                    WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE or
+                        WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+                )
+                input.requestFocus()
             }
-
-            input.addTextChangedListener(object : TextWatcher {
-                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
-                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                    refreshResults(s?.toString().orEmpty())
-                }
-                override fun afterTextChanged(s: Editable?) = Unit
-            })
-            results.setOnItemClickListener { _, _, position, _ ->
-                matches.getOrNull(position)?.let { app ->
-                    dialog.dismiss()
-                    launch(app)
-                }
-            }
-            dialog.window?.setSoftInputMode(
-                WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE or
-                    WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
-            )
             dialog.show()
-            input.requestFocus()
-            dialog.window?.setSoftInputMode(
-                WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE or
-                    WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
-            )
         }
 
         override fun onTouchEvent(e: MotionEvent): Boolean {
@@ -521,7 +480,7 @@ class MainActivity : Activity() {
                         return true
                     }
                     if (e.y in 20f*d..68f*d && e.x in 22f*d..(width-22f*d)) {
-                        openAppSearch()
+                        openGoogleSearch()
                         return true
                     }
                     val dockTop=height-76f*d
