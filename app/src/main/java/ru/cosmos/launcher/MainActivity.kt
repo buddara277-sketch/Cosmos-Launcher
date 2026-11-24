@@ -697,8 +697,6 @@ class MainActivity : Activity() {
                 // Keep the original icon crisp, but leave a glass rim visible around it.
                 val icon = orb.apps.first().icon
                 val iconSize = r * .79f
-                val iconPlate = RectF(orb.x-iconSize-2f*d, orb.y-iconSize-2f*d,
-                    orb.x+iconSize+2f*d, orb.y+iconSize+2f*d)
                 paint.color = Color.argb(62, 220, 238, 255)
                 c.drawCircle(orb.x, orb.y-r*.04f, iconSize+3f*d, paint)
                 c.drawBitmap(icon, null,
