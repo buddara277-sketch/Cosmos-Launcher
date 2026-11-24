@@ -319,7 +319,7 @@ class MainActivity : Activity() {
             paint.textAlign = Paint.Align.CENTER
             paint.typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
             paint.textSize = 14f*d
-            c.drawText("Удалить", width/2f, deletePill.centerY+5f*d, paint)
+            c.drawText("Удалить", width/2f, deletePill.centerY()+5f*d, paint)
             paint.typeface = Typeface.DEFAULT
         }
 
@@ -449,7 +449,7 @@ class MainActivity : Activity() {
             val input = EditText(this@MainActivity).apply {
                 setText(folder.folderName)
                 hint = "Название папки"
-                singleLine = true
+                setSingleLine(true)
                 textSize = 16f
                 setPadding((16f*d).toInt(), (12f*d).toInt(), (16f*d).toInt(), (12f*d).toInt())
             }
