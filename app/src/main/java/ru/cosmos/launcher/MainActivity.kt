@@ -118,7 +118,7 @@ class MainActivity : Activity() {
                     val col = inPage % 4
                     val row = inPage / 4
                     orb.x = (w * (0.13f + col * 0.245f)).coerceIn(orb.radius * d + 4f, w - orb.radius * d - 4f)
-                    orb.y = (usableBottom * (0.15f + row * 0.20f)).coerceIn(orb.radius * d + 35f * d, usableBottom - orb.radius * d)
+                    orb.y = (usableBottom * (0.15f + row * 0.20f)).coerceIn(orb.radius * d + 88f * d, usableBottom - orb.radius * d)
                     val angle = index * 2.399f
                     // Calm, slow drift: each sphere keeps a gentle independent direction.
                     val speed = (15f + (index % 5) * 1.5f) * d
@@ -138,6 +138,7 @@ class MainActivity : Activity() {
             if (openedFolder != null) {
                 drawOpenFolder(canvas, openedFolder!!)
             } else {
+                drawSearchBar(canvas)
                 val now = System.nanoTime()
                 val dt = if (previousFrame == 0L) .016f else ((now - previousFrame) / 1e9f).coerceIn(0f, .03f)
                 previousFrame = now
@@ -241,6 +242,62 @@ class MainActivity : Activity() {
             paint.typeface = Typeface.DEFAULT
         }
 
+        private fun drawSearchBar(c: Canvas) {
+            val now = System.nanoTime() / 1_000_000_000.0
+            val pulse = ((sin(now * 1.15) + 1.0) / 2.0).toFloat()
+            val alpha = (145f + pulse * 55f).toInt()
+            val left = 22f * d
+            val right = width - 22f * d
+            val top = 20f * d
+            val bottom = top + 48f * d
+            val oval = RectF(left, top, right, bottom)
+
+            paint.style = Paint.Style.FILL
+            paint.setShadowLayer((5f + pulse * 5f) * d, 0f, 0f, Color.argb((35f + pulse * 45f).toInt(), 95, 175, 255))
+            paint.shader = LinearGradient(
+                left, top, right, bottom,
+                intArrayOf(
+                    Color.argb(112, 150, 195, 255),
+                    Color.argb(48, 55, 90, 145),
+                    Color.argb(92, 120, 170, 235)
+                ),
+                null, Shader.TileMode.CLAMP
+            )
+            c.drawRoundRect(oval, 26f * d, 26f * d, paint)
+            paint.shader = null
+            paint.clearShadowLayer()
+
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = (1f + pulse * .35f) * d
+            paint.color = Color.argb(alpha, 210, 232, 255)
+            c.drawRoundRect(oval, 26f * d, 26f * d, paint)
+            paint.style = Paint.Style.FILL
+
+            // Soft moving glass highlight and a quiet search hint.
+            paint.shader = LinearGradient(
+                left + 8f * d, top, left + width * .42f, bottom,
+                intArrayOf(Color.argb((28f + pulse * 32f).toInt(), 255, 255, 255), Color.TRANSPARENT),
+                null, Shader.TileMode.CLAMP
+            )
+            c.drawRoundRect(oval, 26f * d, 26f * d, paint)
+            paint.shader = null
+
+            val iconX = left + 23f * d
+            val iconY = (top + bottom) / 2f
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = 1.8f * d
+            paint.strokeCap = Paint.Cap.ROUND
+            paint.color = Color.argb(210, 225, 239, 255)
+            c.drawCircle(iconX, iconY - 1f * d, 6f * d, paint)
+            c.drawLine(iconX + 4.5f * d, iconY + 3.5f * d, iconX + 9f * d, iconY + 8f * d, paint)
+            paint.style = Paint.Style.FILL
+            paint.color = Color.argb(190, 225, 239, 255)
+            paint.textAlign = Paint.Align.LEFT
+            paint.typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+            paint.textSize = 13f * d
+            c.drawText("Поиск приложений", left + 43f * d, iconY + 4.5f * d, paint)
+        }
+
         private fun drawDeletePill(c: Canvas) {
             val w = 124f*d
             val h = 38f*d
@@ -331,8 +388,8 @@ class MainActivity : Activity() {
                 if (orb.x < edge+r || orb.x > width-edge-r) {
                     orb.vx=-orb.vx*.96f; orb.x=orb.x.coerceIn(edge+r,width-edge-r)
                 }
-                if (orb.y < 42f*d+r || orb.y > bottom-r) {
-                    orb.vy=-orb.vy*.96f; orb.y=orb.y.coerceIn(42f*d+r,bottom-r)
+                if (orb.y < 88f*d+r || orb.y > bottom-r) {
+                    orb.vy=-orb.vy*.96f; orb.y=orb.y.coerceIn(88f*d+r,bottom-r)
                 }
             }
             for (i in active.indices) for (j in i+1 until active.size) {
@@ -427,7 +484,7 @@ class MainActivity : Activity() {
                                 getSharedPreferences("cosmos_launcher", MODE_PRIVATE).edit().putInt("current_page",currentPage).apply()
                             }
                             orb.x=orb.x.coerceIn(orb.radius*d+4f*d,width-orb.radius*d-4f*d)
-                            orb.y=orb.y.coerceIn(42f*d+orb.radius*d,height-112f*d-orb.radius*d)
+                            orb.y=orb.y.coerceIn(88f*d+orb.radius*d,height-112f*d-orb.radius*d)
                         }
                     } else if (!swipeHandled && abs(e.x-downX)>55f*d && abs(e.x-downX)>abs(e.y-downY)) {
                         currentPage=(currentPage + if (e.x<downX) 1 else -1).coerceIn(0,2)
