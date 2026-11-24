@@ -454,6 +454,55 @@ class MainActivity : Activity() {
             addApp(1, "capcut")
             addApp(1, "deepseek")
 
+            // Complete reference folders from the apps actually installed on the device.
+            // Match by both visible label and package family, without stealing apps
+            // already assigned to another desktop shortcut or folder.
+            fun fillFolder(name: String, limit: Int, matches: (AppEntry) -> Boolean) {
+                val folder = orbs.firstOrNull { it.isFolder && it.folderName == name } ?: return
+                val assignedElsewhere = (dock.map { it.packageName } +
+                    orbs.filter { it !== folder }.flatMap { it.apps }.map { it.packageName } +
+                    folder.apps.map { it.packageName }).toMutableSet()
+                allApps.filter { it.packageName !in assignedElsewhere && matches(it) }
+                    .take((limit - folder.apps.size).coerceAtLeast(0))
+                    .forEach { app ->
+                        folder.apps.add(app)
+                        used.add(app.packageName)
+                        assignedElsewhere.add(app.packageName)
+                    }
+            }
+            fillFolder("Google", 12) { app ->
+                app.packageName.startsWith("com.google.") ||
+                    app.title.contains("Google", true)
+            }
+            fillFolder("Инструменты", 12) { app ->
+                listOf("калькулятор", "calculator", "часы", "clock", "погода", "weather",
+                    "диктофон", "recorder", "компас", "compass", "заметки", "notes",
+                    "календарь", "calendar", "файлы", "files", "контакты", "contacts",
+                    "сканер", "scanner", "фонарик", "flashlight").any {
+                    app.title.contains(it, true) || app.packageName.contains(it, true)
+                }
+            }
+            fillFolder("ОФИС", 12) { app ->
+                listOf("office", "word", "excel", "powerpoint", "wps", "pdf",
+                    "документ", "таблиц", "презентац", "редактор", "document",
+                    "spreadsheet", "acrobat", "adobe").any {
+                    app.title.contains(it, true) || app.packageName.contains(it, true)
+                }
+            }
+            fillFolder("Хонор", 12) { app ->
+                app.packageName.startsWith("com.hihonor.") ||
+                    app.packageName.startsWith("com.huawei.") ||
+                    app.title.contains("honor", true) ||
+                    app.title.contains("хонор", true) ||
+                    app.title.contains("huawei", true)
+            }
+            fillFolder("Магазин", 12) { app ->
+                listOf("wildberries", "ozon", "яндекс маркет", "market", "магазин",
+                    "aliexpress", "алиэкспресс", "авито", "детский мир", "ламода").any {
+                    app.title.contains(it, true) || app.packageName.contains(it, true)
+                }
+            }
+
             // The reference "Разное" folder contains a full 3x3 set. Fill its remaining
             // slots with installed apps that have not been assigned to another desktop orb.
             orbs.firstOrNull { it.isFolder && it.folderName == "Разное" }?.let { miscFolder ->
