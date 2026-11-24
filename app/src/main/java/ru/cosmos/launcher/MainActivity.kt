@@ -1447,12 +1447,18 @@ class MainActivity : Activity() {
                         }
                     }
                     val savedFolderName = item.optString("folderName","Папка")
-                    // Restore all nine reference apps in folder 27 if an older build
-                    // persisted only the preview subset.
-                    if (savedFolderName == "27") {
-                        val referenceFolder = orbs.firstOrNull { it.isFolder && it.folderName == "27" }
+                    // Restore the complete predefined contents of every reference folder.
+                    // Older builds could persist only a partial member list; match by folder
+                    // name so each folder receives only its own apps, never another folder's.
+                    if (item.optBoolean("isFolder", entries.size > 1)) {
+                        val referenceFolder = orbs.firstOrNull {
+                            it.isFolder && it.folderName == savedFolderName
+                        }
                         referenceFolder?.apps?.forEach { app ->
-                            if (entries.none { it.packageName == app.packageName }) entries.add(app)
+                            if (entries.none { it.packageName == app.packageName } &&
+                                dock.none { it.packageName == app.packageName }) {
+                                entries.add(app)
+                            }
                         }
                     }
                     if (entries.isNotEmpty()) restored += Orb(
