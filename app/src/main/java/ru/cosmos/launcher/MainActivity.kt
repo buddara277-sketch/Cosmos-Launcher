@@ -39,7 +39,11 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN)
+        // Keep Android status/navigation bars available for notifications,
+        // gesture navigation, quick settings and system controls.
+        window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+        window.statusBarColor = Color.rgb(5, 12, 30)
+        window.navigationBarColor = Color.rgb(5, 12, 30)
         root = FrameLayout(this)
         cosmosField = CosmosField()
         root.addView(cosmosField!!, FrameLayout.LayoutParams(
@@ -62,6 +66,12 @@ class MainActivity : Activity() {
     override fun onStop() {
         try { widgetHost.stopListening() } catch (_: Exception) { }
         super.onStop()
+    }
+
+    @Deprecated("Use system back dispatcher on newer Android versions")
+    override fun onBackPressed() {
+        if (cosmosField?.closeFolderOnBack() == true) return
+        // As the HOME app, Back should not close the launcher or reveal an empty task.
     }
 
     private fun attachSavedWidget() {
@@ -867,6 +877,14 @@ class MainActivity : Activity() {
             } else {
                 packageManager.getLaunchIntentForPackage(app.packageName)?.let { startActivity(it) }
             }
+        }
+
+        fun closeFolderOnBack(): Boolean {
+            if (openedFolder == null) return false
+            openedFolder = null
+            folderScrollOffset = 0f
+            invalidate()
+            return true
         }
 
         private fun renameFolder(folder: Orb) {
