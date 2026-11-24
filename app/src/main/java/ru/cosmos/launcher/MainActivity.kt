@@ -198,7 +198,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private data class AppEntry(val title: String, val packageName: String, val icon: Bitmap, val launchUrl: String? = null)
+    private data class AppEntry(val title: String, val packageName: String, val icon: Bitmap, val launchUrl: String? = null, val launchIntent: Intent? = null)
     private data class Orb(
         val apps: MutableList<AppEntry>,
         var x: Float = 0f,
@@ -227,6 +227,7 @@ class MainActivity : Activity() {
         private var folderTouchMoved = false
         private var folderTouchIndex = -1
         private var folderHeaderTapped = false
+        private var folderItemLongPressed = false
         private var previousFrame = 0L
         private var selected: Orb? = null
         private var downX = 0f
@@ -252,6 +253,14 @@ class MainActivity : Activity() {
                 longPressTriggered = true
                 selected?.let { it.vx = 0f; it.vy = 0f }
                 invalidate()
+            }
+        }
+        private val folderItemLongPressAction = Runnable {
+            val folder = openedFolder
+            val index = folderTouchIndex
+            if (folder != null && !folderTouchMoved && index in folder.apps.indices) {
+                folderItemLongPressed = true
+                showFolderAppActions(folder, index)
             }
         }
 
@@ -291,37 +300,83 @@ class MainActivity : Activity() {
             }
             fun addFolder(name: String, page: Int, groups: List<List<String>>) {
                 val members = mutableListOf<AppEntry>()
-                groups.forEach { words -> take(*words.toTypedArray())?.let(members::add) }
+                groups.forEach { words ->
+                    val match = allApps.firstOrNull { app ->
+                        members.none { it.packageName == app.packageName } &&
+                            words.any { word ->
+                                app.title.contains(word, ignoreCase = true) ||
+                                    app.packageName.contains(word, ignoreCase = true)
+                            }
+                    }
+                    match?.let(members::add)
+                }
+                used.addAll(members.map { it.packageName })
                 if (members.isNotEmpty()) orbs += Orb(members, page = page, folderName = name, forceFolder = true)
             }
-            // The dock is a fixed four-slot set. Resolve it once, then keep the
-            // exact package order in preferences so newly installed apps never replace it.
+            // Four fixed dock positions. Resolve system apps by launcher label first,
+            // then by their Android standard intent, and always retain a visible slot.
             val dockPrefs = getSharedPreferences("cosmos_launcher", MODE_PRIVATE)
             val savedDock = dockPrefs.getString("dock_packages", null)?.split("|").orEmpty()
             fun normalized(value: String) = value.lowercase().replace(" ", "").replace("_", "")
-            fun resolveDockSlot(index: Int, labelAliases: List<String>, packageAliases: List<String>) {
+            fun fallbackIcon(glyph: String): Bitmap {
+                val bitmap = Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888)
+                val canvas = Canvas(bitmap)
+                val p = Paint(Paint.ANTI_ALIAS_FLAG)
+                p.color = Color.rgb(28, 72, 132)
+                canvas.drawCircle(48f, 48f, 45f, p)
+                p.color = Color.WHITE
+                p.textAlign = Paint.Align.CENTER
+                p.typeface = Typeface.create("sans-serif", Typeface.BOLD)
+                p.textSize = if (glyph.length > 2) 24f else 42f
+                canvas.drawText(glyph, 48f, 62f, p)
+                return bitmap
+            }
+            fun resolveDockSlot(index: Int, title: String, glyph: String,
+                                labelAliases: List<String>, packageAliases: List<String>,
+                                fallbackIntent: Intent) {
                 val labels = labelAliases.map(::normalized).toSet()
                 val packages = packageAliases.toSet()
                 val saved = savedDock.getOrNull(index)?.let { pkg ->
-                    allApps.firstOrNull { it.packageName == pkg && (it.packageName in packages || normalized(it.title) in labels) }
+                    allApps.firstOrNull { it.packageName == pkg }
                 }
-                val app = saved ?: allApps.firstOrNull {
-                    it.packageName in packages || normalized(it.title) in labels
+                val matched = saved ?: allApps.firstOrNull { app ->
+                    app.packageName in packages || normalized(app.title) in labels
                 }
-                app?.takeIf { dock.none { existing -> existing.packageName == it.packageName } }?.let(dock::add)
+                val resolvedInfo = if (matched == null) {
+                    try { packageManager.resolveActivity(fallbackIntent, 0)?.activityInfo }
+                    catch (_: Exception) { null }
+                } else null
+                val resolved = if (matched != null) matched else if (resolvedInfo != null) {
+                    AppEntry(
+                        resolvedInfo.loadLabel(packageManager).toString().ifBlank { title },
+                        resolvedInfo.packageName,
+                        drawableToBitmap(resolvedInfo.loadIcon(packageManager)),
+                        launchIntent = Intent(fallbackIntent).setPackage(resolvedInfo.packageName)
+                    )
+                } else {
+                    AppEntry(title, "cosmos:dock:$index", fallbackIcon(glyph), launchIntent = fallbackIntent)
+                }
+                val unique = if (dock.any { it.packageName == resolved.packageName }) {
+                    AppEntry(title, "cosmos:dock:$index", fallbackIcon(glyph), launchIntent = fallbackIntent)
+                } else resolved
+                dock.add(unique)
             }
-            // Rebuild the four fixed slots in order and repair older three-slot saves.
-            resolveDockSlot(0, listOf("Телефон", "Phone", "Dialer"), listOf(
-                "com.google.android.dialer", "com.android.dialer", "com.huawei.contacts",
-                "com.huawei.phone", "com.android.phone"
-            ))
-            resolveDockSlot(1, listOf("Сообщения", "Messages", "SMS"), listOf(
-                "com.google.android.apps.messaging", "com.android.mms", "com.huawei.message"
-            ))
-            resolveDockSlot(2, listOf("Chrome"), listOf("com.android.chrome"))
-            resolveDockSlot(3, listOf("Галерея", "Gallery", "Photos"), listOf(
-                "com.huawei.photos", "com.android.gallery3d", "com.google.android.apps.photos"
-            ))
+            resolveDockSlot(0, "Телефон", "☎",
+                listOf("Телефон", "Phone", "Dialer", "Вызовы", "Звонки"),
+                listOf("com.google.android.dialer", "com.android.dialer", "com.huawei.contacts",
+                    "com.huawei.phone", "com.android.phone"),
+                Intent(Intent.ACTION_DIAL))
+            resolveDockSlot(1, "Сообщения", "SMS",
+                listOf("Сообщения", "Messages", "SMS", "Message"),
+                listOf("com.google.android.apps.messaging", "com.android.mms", "com.huawei.message"),
+                Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_MESSAGING))
+            resolveDockSlot(2, "Chrome", "C",
+                listOf("Chrome"), listOf("com.android.chrome"),
+                Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com")).setPackage("com.android.chrome"))
+            resolveDockSlot(3, "Галерея", "▧",
+                listOf("Галерея", "Gallery", "Photos", "Фото", "Альбом"),
+                listOf("com.huawei.photos", "com.android.gallery3d", "com.google.android.apps.photos"),
+                Intent(Intent.ACTION_MAIN).addCategory("android.intent.category.APP_GALLERY"))
             dockPrefs.edit().putString("dock_packages", dock.joinToString("|") { it.packageName }).apply()
 
             // Desktop 1: the exact folder names and independent shortcuts from the reference.
@@ -339,12 +394,15 @@ class MainActivity : Activity() {
                 listOf("gmail"), listOf("google maps", "карты"),
                 listOf("drive"), listOf("youtube"),
                 listOf("google photos"), listOf("play store"),
-                listOf("google")
+                listOf("google"), listOf("google calendar", "календарь"),
+                listOf("google keep", "keep")
             ))
             addFolder("Инструменты", 0, listOf(
                 listOf("калькулятор", "calculator"), listOf("часы", "clock"),
                 listOf("погода", "weather"), listOf("диктофон", "recorder"),
-                listOf("компас", "compass"), listOf("заметки", "notes")
+                listOf("компас", "compass"), listOf("заметки", "notes"),
+                listOf("календарь", "calendar"), listOf("файлы", "files", "file manager"),
+                listOf("контакты", "contacts")
             ))
             addApp(0, "настройки", "settings")
 
@@ -352,6 +410,18 @@ class MainActivity : Activity() {
             addFolder("Игры", 1, listOf(
                 listOf("game"), listOf("игр"), listOf("play games")
             ))
+            orbs.firstOrNull { it.isFolder && it.folderName == "Игры" }?.let { gamesFolder ->
+                allApps.filter { app ->
+                    try {
+                        packageManager.getApplicationInfo(app.packageName, 0).category ==
+                            android.content.pm.ApplicationInfo.CATEGORY_GAME
+                    } catch (_: Exception) { false }
+                }.forEach { app ->
+                    if (gamesFolder.apps.none { it.packageName == app.packageName }) {
+                        gamesFolder.apps.add(app)
+                    }
+                }
+            }
             addApp(1, "vpn наружу", "vpn")
             addFolder("ОФИС", 1, listOf(
                 listOf("word"), listOf("excel"), listOf("powerpoint"),
@@ -707,7 +777,8 @@ class MainActivity : Activity() {
                     val row = i / 2
                     val cx = orb.x + (col - .5f) * mini * 1.05f
                     val cy = orb.y - r * .10f + (row - .5f) * mini * .82f
-                    c.drawBitmap(app.icon, null, RectF(cx-mini*.48f, cy-mini*.48f, cx+mini*.48f, cy+mini*.48f), paint)
+                    c.drawBitmap(app.icon, null, RectF(cx-mini*.58f, cy-mini*.58f, cx+mini*.58f, cy+mini*.58f),
+                        Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply { alpha = 255; color = Color.WHITE })
                 }
             } else {
                 // Keep the original icon crisp, but leave a glass rim visible around it.
@@ -726,7 +797,7 @@ class MainActivity : Activity() {
             // Subtle glass highlight.
             paint.shader = RadialGradient(
                 orb.x - r * .34f, orb.y - r * .48f, r * .58f,
-                intArrayOf(Color.argb(105, 255, 255, 255), Color.argb(0, 255, 255, 255)),
+                intArrayOf(Color.argb(28, 255, 255, 255), Color.argb(0, 255, 255, 255)),
                 null, Shader.TileMode.CLAMP
             )
             c.drawCircle(orb.x, orb.y, r*.96f, paint)
@@ -963,7 +1034,7 @@ class MainActivity : Activity() {
             paint.color = Color.argb(125, 190, 220, 255)
             c.drawRoundRect(dockRect, 26f*d, 26f*d, paint)
             paint.style = Paint.Style.FILL
-            val count = dock.size.coerceAtLeast(1)
+            val count = 4
             dock.forEachIndexed { i, app ->
                 val size = 43f*d
                 val radius = size / 2f
@@ -974,7 +1045,8 @@ class MainActivity : Activity() {
                 val deep = Color.HSVToColor(floatArrayOf(hue, .72f, .38f))
                 val clipSave = c.save()
                 c.clipPath(Path().apply { addCircle(cx, cy, radius, Path.Direction.CW) })
-                c.drawBitmap(app.icon, null, RectF(cx-radius, cy-radius, cx+radius, cy+radius), paint)
+                c.drawBitmap(app.icon, null, RectF(cx-radius, cy-radius, cx+radius, cy+radius),
+                    Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply { alpha = 255; color = Color.WHITE })
                 // Keep the launcher-provided dock icon colors untouched.
                 paint.shader = null
                 c.restoreToCount(clipSave)
@@ -1039,7 +1111,8 @@ class MainActivity : Activity() {
                     c.drawRoundRect(tile, 17f*d, 17f*d, paint)
                     paint.style = Paint.Style.FILL
                     val size=43f*d
-                    c.drawBitmap(app.icon,null,RectF(cx-size/2,cy-size/2,cx+size/2,cy+size/2),paint)
+                    c.drawBitmap(app.icon,null,RectF(cx-size/2,cy-size/2,cx+size/2,cy+size/2),
+                        Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply { alpha = 255; color = Color.WHITE })
                     paint.color=Color.WHITE
                     paint.textSize=10f*d
                     c.drawText(app.title.take(15),cx,cy+size/2+16f*d,paint)
@@ -1098,9 +1171,13 @@ class MainActivity : Activity() {
         private fun launch(app: AppEntry) {
             if (app.launchUrl != null) {
                 startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(app.launchUrl)))
+            } else if (app.launchIntent != null) {
+                try {
+                    startActivity(Intent(app.launchIntent).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                } catch (_: Exception) { }
             } else {
                 packageManager.getLaunchIntentForPackage(app.packageName)?.let { intent ->
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
                     startActivity(intent)
                 }
             }
@@ -1109,6 +1186,7 @@ class MainActivity : Activity() {
         fun closeFolderOnBack(): Boolean {
             if (openedFolder == null) return false
             openedFolder = null
+            touchHandler.removeCallbacks(folderItemLongPressAction)
             folderScrollOffset = 0f
             invalidate()
             return true
@@ -1145,6 +1223,40 @@ class MainActivity : Activity() {
                     WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
             )
             input.requestFocus()
+        }
+
+        private fun showFolderAppActions(folder: Orb, index: Int) {
+            if (index !in folder.apps.indices) return
+            val app = folder.apps[index]
+            AlertDialog.Builder(this@MainActivity)
+                .setTitle(app.title)
+                .setItems(arrayOf("Переместить на рабочий стол", "Убрать из Cosmos", "Отмена")) { dialog, which ->
+                    if (which == 0 || which == 1) {
+                        val prefs = getSharedPreferences("cosmos_launcher", MODE_PRIVATE)
+                        val customized = prefs.getStringSet("customized_folders", emptySet())
+                            ?.toMutableSet() ?: mutableSetOf()
+                        customized.add(folder.folderName)
+                        prefs.edit().putStringSet("customized_folders", customized).apply()
+
+                        folder.apps.removeAll { it.packageName == app.packageName }
+                        if (which == 0) {
+                            val minX = (folder.radius * d + 8f*d)
+                            val maxX = (width - folder.radius*d - 8f*d).coerceAtLeast(minX)
+                            val x = (folder.x + folder.radius*d*2.1f).coerceIn(minX, maxX)
+                            val minY = 92f*d + 36f*d
+                            val maxY = (height - 124f*d).coerceAtLeast(minY)
+                            val y = folder.y.coerceIn(minY, maxY)
+                            val angle = (app.packageName.hashCode() % 360) * (Math.PI / 180.0)
+                            orbs.add(Orb(mutableListOf(app), x, y,
+                                cos(angle).toFloat()*150f*d, sin(angle).toFloat()*150f*d,
+                                page = folder.page))
+                        }
+                        if (folder.apps.isEmpty()) orbs.remove(folder)
+                        saveLayout()
+                        invalidate()
+                    }
+                }
+                .show()
         }
 
         private fun openGoogleSearch() {
@@ -1227,6 +1339,7 @@ class MainActivity : Activity() {
                         val box=RectF(18f*d,height*.17f,width-18f*d,height*.80f)
                         if (!box.contains(e.x,e.y)) {
                             openedFolder=null
+                            touchHandler.removeCallbacks(folderItemLongPressAction)
                             folderScrollOffset=0f
                             invalidate()
                             return true
@@ -1239,6 +1352,11 @@ class MainActivity : Activity() {
                         val col=((e.x-box.left-14f*d)/cellW).toInt()
                         val row=((e.y-box.top-58f*d+folderScrollOffset)/(94f*d)).toInt()
                         folderTouchIndex=if (!folderHeaderTapped && col in 0..2 && row>=0) row*3+col else -1
+                        folderItemLongPressed = false
+                        touchHandler.removeCallbacks(folderItemLongPressAction)
+                        if (folderTouchIndex in folder.apps.indices) {
+                            touchHandler.postDelayed(folderItemLongPressAction, 520L)
+                        }
                         return true
                     }
                     if (currentPage == 2 && meteoredWidgetView == null && weatherWidgetRect.contains(e.x,e.y)) {
@@ -1267,7 +1385,7 @@ class MainActivity : Activity() {
                 MotionEvent.ACTION_MOVE -> {
                     // Page swipes have priority over orb selection. This allows
                     // switching desktops even when the finger starts on a moving sphere.
-                    if (openedFolder == null && !dragging && !swipeHandled &&
+                    if (openedFolder == null && selected == null && !dragging && !swipeHandled &&
                         abs(e.x - downX) > 55f*d && abs(e.x - downX) > abs(e.y - downY)) {
                         touchHandler.removeCallbacks(longPressAction)
                         selected = null
@@ -1284,6 +1402,7 @@ class MainActivity : Activity() {
                     }
                     if (openedFolder != null) {
                         if (abs(e.y-folderDownY)>8f*d) {
+                            touchHandler.removeCallbacks(folderItemLongPressAction)
                             folderTouchMoved=true
                             val boxHeight=height*.63f
                             val rows=ceil(openedFolder!!.apps.size/3.0).toInt()
@@ -1347,7 +1466,14 @@ class MainActivity : Activity() {
                 MotionEvent.ACTION_UP -> {
                     touchHandler.removeCallbacks(longPressAction)
                     if (openedFolder != null) {
+                        touchHandler.removeCallbacks(folderItemLongPressAction)
                         val folder = openedFolder!!
+                        if (folderItemLongPressed) {
+                            folderTouchIndex = -1
+                            folderHeaderTapped = false
+                            invalidate()
+                            return true
+                        }
                         if (!folderTouchMoved && folderHeaderTapped) {
                             renameFolder(folder)
                         } else if (!folderTouchMoved && folderTouchIndex in folder.apps.indices) {
@@ -1395,9 +1521,11 @@ class MainActivity : Activity() {
                 }
                 MotionEvent.ACTION_CANCEL -> {
                     touchHandler.removeCallbacks(longPressAction)
+                    touchHandler.removeCallbacks(folderItemLongPressAction)
                     if (openedFolder != null) {
                         folderTouchIndex=-1
                         folderTouchMoved=false
+                        folderItemLongPressed=false
                         return true
                     }
                     selected=null
@@ -1467,9 +1595,13 @@ class MainActivity : Activity() {
                     // Restore the complete predefined contents of every reference folder.
                     // Older builds could persist only a partial member list; match by folder
                     // name so each folder receives only its own apps, never another folder's.
-                    if (item.optBoolean("isFolder", entries.size > 1)) {
+                    val customizedFolders = prefs.getStringSet("customized_folders", emptySet()).orEmpty()
+                    if (item.optBoolean("isFolder", entries.size > 1) &&
+                        savedFolderName !in customizedFolders) {
+                        val normalizedSavedName = savedFolderName.lowercase().replace(" ", "").replace("_", "")
                         val referenceFolder = orbs.firstOrNull {
-                            it.isFolder && it.folderName == savedFolderName
+                            it.isFolder &&
+                                it.folderName.lowercase().replace(" ", "").replace("_", "") == normalizedSavedName
                         }
                         referenceFolder?.apps?.forEach { app ->
                             if (entries.none { it.packageName == app.packageName } &&
