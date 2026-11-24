@@ -25,7 +25,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         window.setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN)
         cosmosField = CosmosField()
-        setContentView(cosmosField)
+        setContentView(cosmosField!!)
     }
 
     override fun onResume() {
@@ -233,6 +233,14 @@ class MainActivity : Activity() {
 
             val known = getSharedPreferences("cosmos_launcher", MODE_PRIVATE)
                 .getStringSet("known_packages", emptySet())?.toMutableSet() ?: mutableSetOf()
+            // Drop shortcuts for apps that were uninstalled; keep web bookmarks intact.
+            orbs.forEach { orb ->
+                orb.apps.removeAll { it.launchUrl == null && it.packageName !in freshByPackage }
+            }
+            orbs.removeAll { it.apps.isEmpty() }
+            dock.removeAll { it.packageName !in freshByPackage }
+            known.retainAll(freshByPackage.keys)
+
             val placed = (dock.map { it.packageName } + orbs.flatMap { it.apps }.map { it.packageName }).toMutableSet()
 
             // Refresh labels/icons for apps already present without changing their positions.
