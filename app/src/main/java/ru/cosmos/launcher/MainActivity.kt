@@ -12,7 +12,6 @@ import android.os.Looper
 import android.view.MotionEvent
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
-import android.widget.LinearLayout
 import android.view.View
 import android.view.WindowManager
 import org.json.JSONArray
@@ -444,11 +443,18 @@ class MainActivity : Activity() {
                 .setPositiveButton("Найти") { _, _ ->
                     val query = input.text.toString().trim()
                     if (query.isNotEmpty()) {
-                        val searchIntent = Intent(
-                            Intent.ACTION_VIEW,
-                            Uri.parse("https://www.google.com/search?q=" + Uri.encode(query))
-                        )
-                        startActivity(searchIntent)
+                        val googleAppIntent = Intent(Intent.ACTION_WEB_SEARCH)
+                            .setPackage("com.google.android.googlequicksearchbox")
+                            .putExtra("query", query)
+                        try {
+                            startActivity(googleAppIntent)
+                        } catch (_: Exception) {
+                            val browserIntent = Intent(
+                                Intent.ACTION_VIEW,
+                                Uri.parse("https://www.google.com/search?q=" + Uri.encode(query))
+                            )
+                            startActivity(browserIntent)
+                        }
                     }
                 }
                 .create()
