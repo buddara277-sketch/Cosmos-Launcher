@@ -694,9 +694,15 @@ class MainActivity : Activity() {
                     c.drawBitmap(app.icon, null, RectF(cx-mini*.48f, cy-mini*.48f, cx+mini*.48f, cy+mini*.48f), paint)
                 }
             } else {
+                // Keep the original icon crisp, but leave a glass rim visible around it.
                 val icon = orb.apps.first().icon
-                val iconRect = RectF(orb.x-r, orb.y-r, orb.x+r, orb.y+r)
-                c.drawBitmap(icon, null, iconRect, paint)
+                val iconSize = r * .79f
+                val iconPlate = RectF(orb.x-iconSize-2f*d, orb.y-iconSize-2f*d,
+                    orb.x+iconSize+2f*d, orb.y+iconSize+2f*d)
+                paint.color = Color.argb(62, 220, 238, 255)
+                c.drawCircle(orb.x, orb.y-r*.04f, iconSize+3f*d, paint)
+                c.drawBitmap(icon, null,
+                    RectF(orb.x-iconSize, orb.y-iconSize, orb.x+iconSize, orb.y+iconSize), paint)
             }
 
             // Dark translucent label strip keeps the app artwork visible and text readable.
@@ -715,9 +721,17 @@ class MainActivity : Activity() {
 
             paint.style = Paint.Style.STROKE
             paint.strokeWidth = 1.15f * d
-            paint.color = Color.argb(190, 220, 240, 255)
+            paint.color = Color.argb(205, 220, 240, 255)
             c.drawCircle(orb.x, orb.y, r - .7f*d, paint)
+            paint.strokeWidth = .65f*d
+            paint.color = Color.argb(92, 220, 240, 255)
+            c.drawCircle(orb.x, orb.y, r - 3.2f*d, paint)
             paint.style = Paint.Style.FILL
+            // Small specular glint gives the sphere a polished glass finish.
+            paint.shader = LinearGradient(orb.x-r*.55f, orb.y-r*.72f, orb.x+r*.12f, orb.y-r*.20f,
+                intArrayOf(Color.argb(78,255,255,255), Color.TRANSPARENT), null, Shader.TileMode.CLAMP)
+            c.drawOval(RectF(orb.x-r*.56f, orb.y-r*.76f, orb.x+r*.18f, orb.y-r*.42f), paint)
+            paint.shader = null
 
             val label = if (orb.isFolder) orb.folderName else orb.apps.first().title
             paint.color = Color.WHITE
@@ -837,32 +851,41 @@ class MainActivity : Activity() {
             val bottom = top+112f*d
             weatherWidgetRect.set(left,top,right,bottom)
             paint.style = Paint.Style.FILL
+            paint.setShadowLayer(18f*d, 0f, 5f*d, Color.argb(90, 65, 145, 255))
             paint.shader = LinearGradient(left,top,right,bottom,
-                intArrayOf(Color.argb(205,30,75,125),Color.argb(175,12,29,62)),
+                intArrayOf(Color.argb(218,52,91,145),Color.argb(185,12,27,58),Color.argb(205,27,45,83)),
                 null,Shader.TileMode.CLAMP)
-            c.drawRoundRect(weatherWidgetRect,22f*d,22f*d,paint)
+            c.drawRoundRect(weatherWidgetRect,26f*d,26f*d,paint)
+            paint.shader = null
+            paint.clearShadowLayer()
+            paint.shader = LinearGradient(left,top,left,bottom,
+                intArrayOf(Color.argb(45,255,255,255),Color.TRANSPARENT),null,Shader.TileMode.CLAMP)
+            c.drawRoundRect(weatherWidgetRect,26f*d,26f*d,paint)
             paint.shader = null
             paint.style = Paint.Style.STROKE
-            paint.strokeWidth = 1.2f*d
-            paint.color = Color.argb(190,190,225,255)
-            c.drawRoundRect(weatherWidgetRect,22f*d,22f*d,paint)
+            paint.strokeWidth = 1.1f*d
+            paint.color = Color.argb(170,195,225,255)
+            c.drawRoundRect(weatherWidgetRect,26f*d,26f*d,paint)
             paint.style = Paint.Style.FILL
-            paint.color = Color.WHITE
+            paint.color = Color.argb(160,140,190,245)
             paint.textAlign = Paint.Align.LEFT
+            paint.textSize = 9f*d
             paint.typeface = Typeface.create("sans-serif-medium",Typeface.BOLD)
-            paint.textSize = 17f*d
-            c.drawText("Meteored",left+18f*d,top+31f*d,paint)
-            paint.textSize = 12f*d
+            c.drawText("ПРОГНОЗ ПОГОДЫ",left+18f*d,top+22f*d,paint)
+            paint.color = Color.WHITE
+            paint.textSize = 19f*d
+            c.drawText("Meteored",left+18f*d,top+49f*d,paint)
+            paint.textSize = 11f*d
             paint.typeface = Typeface.DEFAULT
             paint.color = Color.argb(220,220,235,255)
-            c.drawText("Погодный виджет",left+18f*d,top+57f*d,paint)
-            paint.textSize = 11f*d
-            paint.color = Color.argb(185,210,225,245)
-            c.drawText("Нажми, чтобы открыть прогноз",left+18f*d,top+82f*d,paint)
+            c.drawText("Подключи виджет приложения",left+18f*d,top+76f*d,paint)
+            paint.color = Color.argb(185,200,220,245)
+            paint.textSize = 10f*d
+            c.drawText("Нажми, чтобы выбрать виджет",left+18f*d,top+94f*d,paint)
             paint.textAlign = Paint.Align.CENTER
-            paint.textSize = 35f*d
-            paint.color = Color.rgb(255,214,105)
-            c.drawText("☀",right-42f*d,top+68f*d,paint)
+            paint.textSize = 34f*d
+            paint.color = Color.rgb(255,214,125)
+            c.drawText("☼",right-43f*d,top+72f*d,paint)
         }
 
         private fun drawDeletePill(c: Canvas) {
