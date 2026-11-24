@@ -33,9 +33,10 @@ class MainActivity : Activity() {
         var vx: Float = 0f,
         var vy: Float = 0f,
         var page: Int = 0,
-        var folderName: String = "Папка"
+        var folderName: String = "Папка",
+        var forceFolder: Boolean = false
     ) {
-        val isFolder: Boolean get() = apps.size > 1
+        val isFolder: Boolean get() = forceFolder || apps.size > 1
         val radius: Float get() = if (isFolder) 37f else 29f
     }
 
@@ -114,7 +115,7 @@ class MainActivity : Activity() {
             fun addFolder(name: String, page: Int, groups: List<List<String>>) {
                 val members = mutableListOf<AppEntry>()
                 groups.forEach { words -> take(*words.toTypedArray())?.let(members::add) }
-                if (members.isNotEmpty()) orbs += Orb(members, page = page, folderName = name)
+                if (members.isNotEmpty()) orbs += Orb(members, page = page, folderName = name, forceFolder = true)
             }
             fun pin(vararg words: String) {
                 take(*words)?.let(dock::add)
@@ -832,6 +833,7 @@ class MainActivity : Activity() {
                 orb.apps.forEach { members.put(it.launchUrl?.let { url -> "url:$url" } ?: it.packageName) }
                 item.put("apps",members)
                 item.put("folderName", orb.folderName)
+                item.put("isFolder", orb.isFolder)
                 item.put("x",if(width>0) orb.x/width else 0.5f)
                 item.put("y",if(height>0) orb.y/height else 0.3f)
                 item.put("page",orb.page)
@@ -879,7 +881,8 @@ class MainActivity : Activity() {
                         item.optDouble("x",.5).toFloat()*width,
                         item.optDouble("y",.3).toFloat()*height,
                         page=item.optInt("page",0).coerceIn(0,2),
-                        folderName=item.optString("folderName","Папка")
+                        folderName=item.optString("folderName","Папка"),
+                        forceFolder=item.optBoolean("isFolder", entries.size > 1)
                     )
                 }
                 // An explicitly saved empty array means the user removed every desktop orb.
