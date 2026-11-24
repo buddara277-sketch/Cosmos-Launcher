@@ -999,35 +999,43 @@ class MainActivity : Activity() {
         }
 
         private fun drawDeletePill(c: Canvas) {
-            val w = 150f*d
-            val h = 48f*d
-            deletePill.set((width-w)/2f, 18f*d, (width+w)/2f, 18f*d+h)
+            // The trash target stays above the dock for the entire drag gesture.
+            val w = 174f*d
+            val h = 50f*d
+            deletePill.set((width-w)/2f, height-142f*d, (width+w)/2f, height-142f*d+h)
+            val hovered = selected?.let { deletePill.contains(it.x, it.y) } == true
             paint.style = Paint.Style.FILL
-            paint.setShadowLayer(18f*d, 0f, 4f*d, Color.argb(150, 255, 65, 105))
+            paint.setShadowLayer(if (hovered) 26f*d else 14f*d, 0f, 3f*d,
+                if (hovered) Color.argb(230, 255, 45, 75) else Color.argb(125, 255, 65, 105))
             paint.shader = LinearGradient(deletePill.left, deletePill.top, deletePill.right, deletePill.bottom,
-                intArrayOf(Color.argb(238, 190, 55, 91), Color.argb(220, 105, 28, 66)),
+                if (hovered)
+                    intArrayOf(Color.rgb(255, 72, 92), Color.rgb(175, 20, 55))
+                else
+                    intArrayOf(Color.argb(238, 190, 55, 91), Color.argb(220, 105, 28, 66)),
                 null, Shader.TileMode.CLAMP)
             c.drawRoundRect(deletePill, 25f*d, 25f*d, paint)
             paint.shader = null
             paint.clearShadowLayer()
             paint.style = Paint.Style.STROKE
-            paint.strokeWidth = 1.1f*d
-            paint.color = Color.argb(210, 255, 210, 225)
+            paint.strokeWidth = if (hovered) 2.4f*d else 1.1f*d
+            paint.color = Color.argb(235, 255, 225, 232)
             c.drawRoundRect(deletePill, 25f*d, 25f*d, paint)
             paint.style = Paint.Style.FILL
             val cx = deletePill.centerX()
             val cy = deletePill.centerY()
             paint.color = Color.WHITE
-            paint.strokeWidth = 1.8f*d
+            paint.strokeWidth = 2f*d
             paint.strokeCap = Paint.Cap.ROUND
             paint.style = Paint.Style.STROKE
-            c.drawLine(cx-38f*d, cy-5f*d, cx-28f*d, cy-5f*d, paint)
-            c.drawRoundRect(RectF(cx-35f*d, cy-3f*d, cx-29f*d, cy+7f*d), 1f*d, 1f*d, paint)
+            c.drawLine(cx-48f*d, cy-7f*d, cx-36f*d, cy-7f*d, paint)
+            c.drawLine(cx-46f*d, cy-4f*d, cx-44f*d, cy+9f*d, paint)
+            c.drawLine(cx-38f*d, cy-4f*d, cx-40f*d, cy+9f*d, paint)
+            c.drawLine(cx-44f*d, cy+9f*d, cx-40f*d, cy+9f*d, paint)
             paint.style = Paint.Style.FILL
             paint.textAlign = Paint.Align.CENTER
             paint.typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
-            paint.textSize = 13f*d
-            c.drawText("УДАЛИТЬ", cx+15f*d, cy+4.5f*d, paint)
+            paint.textSize = 12f*d
+            c.drawText(if (hovered) "ОТПУСТИ, ЧТОБЫ УДАЛИТЬ" else "ПЕРЕТАЩИ СЮДА", cx+18f*d, cy+4.5f*d, paint)
             paint.typeface = Typeface.DEFAULT
         }
 
@@ -1507,7 +1515,8 @@ class MainActivity : Activity() {
                         return true
                     }
                     selected?.let { dragged ->
-                        if (dragging && deletePill.contains(e.x,e.y)) {
+                        if (dragging && deletePill.contains(dragged.x, dragged.y)) {
+                            // Dropping the orb itself onto the trash removes it from this desktop.
                             orbs.remove(dragged)
                             saveLayout()
                         } else if (dragging) {
