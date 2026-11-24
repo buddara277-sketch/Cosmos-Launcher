@@ -149,7 +149,7 @@ class MainActivity : Activity() {
             paint.style = Paint.Style.FILL
             paint.shader = LinearGradient(
                 orb.x - r, orb.y - r, orb.x + r, orb.y + r,
-                intArrayOf(Color.argb(105, 255, 255, 255), Color.argb(28, base), Color.argb(105, deep)),
+                intArrayOf(Color.argb(105, 255, 255, 255), Color.argb(28, Color.red(base), Color.green(base), Color.blue(base)), Color.argb(105, Color.red(deep), Color.green(deep), Color.blue(deep))),
                 null, Shader.TileMode.CLAMP
             )
             c.drawRect(orb.x-r, orb.y-r, orb.x+r, orb.y+r, paint)
@@ -226,9 +226,28 @@ class MainActivity : Activity() {
             val count = dock.size.coerceAtLeast(1)
             dock.forEachIndexed { i, app ->
                 val size = 43f*d
+                val radius = size / 2f
                 val cx = width * (i + .5f) / count
                 val cy = top + 32f*d
-                c.drawBitmap(app.icon, null, RectF(cx-size/2, cy-size/2, cx+size/2, cy+size/2), paint)
+                val hue = (app.packageName.hashCode().toLong().and(0x7fffffff) % 360L).toFloat()
+                val tint = Color.HSVToColor(floatArrayOf(hue, .48f, .92f))
+                val deep = Color.HSVToColor(floatArrayOf(hue, .72f, .38f))
+                val clipSave = c.save()
+                c.clipPath(Path().apply { addCircle(cx, cy, radius, Path.Direction.CW) })
+                c.drawBitmap(app.icon, null, RectF(cx-radius, cy-radius, cx+radius, cy+radius), paint)
+                paint.shader = LinearGradient(cx-radius, cy-radius, cx+radius, cy+radius,
+                    intArrayOf(Color.argb(58, 255, 255, 255),
+                        Color.argb(18, Color.red(tint), Color.green(tint), Color.blue(tint)),
+                        Color.argb(78, Color.red(deep), Color.green(deep), Color.blue(deep))),
+                    null, Shader.TileMode.CLAMP)
+                c.drawRect(cx-radius, cy-radius, cx+radius, cy+radius, paint)
+                paint.shader = null
+                c.restoreToCount(clipSave)
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = 1f*d
+                paint.color = Color.argb(175, 220, 240, 255)
+                c.drawCircle(cx, cy, radius-.5f*d, paint)
+                paint.style = Paint.Style.FILL
             }
         }
 
