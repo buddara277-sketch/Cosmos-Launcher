@@ -527,7 +527,7 @@ class MainActivity : Activity() {
                             folderTouchMoved=true
                             val boxHeight=height*.59f
                             val rows=ceil(openedFolder!!.apps.size/3.0).toInt()
-                            val visibleHeight=(boxHeight-150f*d).coerceAtLeast(0f)
+                            val visibleHeight=(boxHeight-96f*d).coerceAtLeast(0f)
                             val maxScroll=(rows*91f*d-visibleHeight).coerceAtLeast(0f)
                             folderScrollOffset=(folderDownOffset+folderDownY-e.y).coerceIn(0f,maxScroll)
                         }
