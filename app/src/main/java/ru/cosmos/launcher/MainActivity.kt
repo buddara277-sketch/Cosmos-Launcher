@@ -302,7 +302,8 @@ class MainActivity : Activity() {
                 val members = mutableListOf<AppEntry>()
                 groups.forEach { words ->
                     val match = allApps.firstOrNull { app ->
-                        members.none { it.packageName == app.packageName } &&
+                        dock.none { it.packageName == app.packageName } &&
+                            members.none { it.packageName == app.packageName } &&
                             words.any { word ->
                                 app.title.contains(word, ignoreCase = true) ||
                                     app.packageName.contains(word, ignoreCase = true)
@@ -337,7 +338,10 @@ class MainActivity : Activity() {
                 val labels = labelAliases.map(::normalized).toSet()
                 val packages = packageAliases.toSet()
                 val saved = savedDock.getOrNull(index)?.let { pkg ->
-                    allApps.firstOrNull { it.packageName == pkg }
+                    allApps.firstOrNull {
+                        it.packageName == pkg &&
+                            (it.packageName in packages || normalized(it.title) in labels)
+                    }
                 }
                 val matched = saved ?: allApps.firstOrNull { app ->
                     app.packageName in packages || normalized(app.title) in labels
@@ -449,6 +453,21 @@ class MainActivity : Activity() {
             addApp(1, "алиса ai", "alice")
             addApp(1, "capcut")
             addApp(1, "deepseek")
+
+            // The reference "Разное" folder contains a full 3x3 set. Fill its remaining
+            // slots with installed apps that have not been assigned to another desktop orb.
+            orbs.firstOrNull { it.isFolder && it.folderName == "Разное" }?.let { miscFolder ->
+                val alreadyPlaced = (dock.map { it.packageName } +
+                    orbs.filter { it !== miscFolder }.flatMap { it.apps }.map { it.packageName }).toMutableSet()
+                allApps.filter { it.packageName !in alreadyPlaced }
+                    .take((9 - miscFolder.apps.size).coerceAtLeast(0))
+                    .forEach { app ->
+                        if (miscFolder.apps.none { it.packageName == app.packageName }) {
+                            miscFolder.apps.add(app)
+                            used.add(app.packageName)
+                        }
+                    }
+            }
 
             // Desktop 3: one app, two browser bookmarks and a Meteored weather panel.
             addApp(2, "buddy")
@@ -1236,6 +1255,7 @@ class MainActivity : Activity() {
                         val customized = prefs.getStringSet("customized_folders", emptySet())
                             ?.toMutableSet() ?: mutableSetOf()
                         customized.add(folder.folderName)
+                        customized.add(folder.folderName.lowercase().replace(" ", "").replace("_", ""))
                         prefs.edit().putStringSet("customized_folders", customized).apply()
 
                         folder.apps.removeAll { it.packageName == app.packageName }
@@ -1597,7 +1617,8 @@ class MainActivity : Activity() {
                     // name so each folder receives only its own apps, never another folder's.
                     val customizedFolders = prefs.getStringSet("customized_folders", emptySet()).orEmpty()
                     if (item.optBoolean("isFolder", entries.size > 1) &&
-                        savedFolderName !in customizedFolders) {
+                        savedFolderName !in customizedFolders &&
+                        savedFolderName.lowercase().replace(" ", "").replace("_", "") !in customizedFolders) {
                         val normalizedSavedName = savedFolderName.lowercase().replace(" ", "").replace("_", "")
                         val referenceFolder = orbs.firstOrNull {
                             it.isFolder &&
