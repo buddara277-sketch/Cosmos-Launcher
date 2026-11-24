@@ -46,6 +46,11 @@ class MainActivity : Activity() {
         private val dock = mutableListOf<AppEntry>()
         private var currentPage = 0
         private var openedFolder: Orb? = null
+        private var folderScrollOffset = 0f
+        private var folderDownY = 0f
+        private var folderDownOffset = 0f
+        private var folderTouchMoved = false
+        private var folderTouchIndex = -1
         private var previousFrame = 0L
         private var selected: Orb? = null
         private var downX = 0f
@@ -367,15 +372,20 @@ class MainActivity : Activity() {
             paint.textSize = 19f*d
             c.drawText("Папка", width/2f, box.top+36f*d, paint)
             val cellW = (box.width()-28f*d)/3f
+            val contentClip = c.save()
+            c.clipRect(box.left+8f*d, box.top+62f*d, box.right-8f*d, box.bottom-34f*d)
             folder.apps.forEachIndexed { i, app ->
                 val col=i%3; val row=i/3
                 val cx=box.left+14f*d+cellW*(col+.5f)
-                val cy=box.top+92f*d+row*91f*d
-                val size=43f*d
-                c.drawBitmap(app.icon,null,RectF(cx-size/2,cy-size/2,cx+size/2,cy+size/2),paint)
-                paint.color=Color.WHITE; paint.textSize=10f*d
-                c.drawText(app.title.take(15),cx,cy+size/2+14f*d,paint)
+                val cy=box.top+92f*d+row*91f*d-folderScrollOffset
+                if (cy > box.top+55f*d && cy < box.bottom-30f*d) {
+                    val size=43f*d
+                    c.drawBitmap(app.icon,null,RectF(cx-size/2,cy-size/2,cx+size/2,cy+size/2),paint)
+                    paint.color=Color.WHITE; paint.textSize=10f*d
+                    c.drawText(app.title.take(15),cx,cy+size/2+14f*d,paint)
+                }
             }
+            c.restoreToCount(contentClip)
             paint.color=Color.LTGRAY; paint.textSize=12f*d
             c.drawText("Нажми вне окна, чтобы закрыть",width/2f,box.bottom-18f*d,paint)
         }
@@ -477,12 +487,19 @@ class MainActivity : Activity() {
                     if (openedFolder != null) {
                         val folder=openedFolder!!
                         val box=RectF(22f*d,height*.19f,width-22f*d,height*.78f)
-                        if (!box.contains(e.x,e.y)) { openedFolder=null; invalidate(); return true }
+                        if (!box.contains(e.x,e.y)) {
+                            openedFolder=null
+                            folderScrollOffset=0f
+                            invalidate()
+                            return true
+                        }
+                        folderDownY=e.y
+                        folderDownOffset=folderScrollOffset
+                        folderTouchMoved=false
                         val cellW=(box.width()-28f*d)/3f
                         val col=((e.x-box.left-14f*d)/cellW).toInt()
-                        val row=((e.y-box.top-55f*d)/(91f*d)).toInt()
-                        val index=row*3+col
-                        if (col in 0..2 && index in folder.apps.indices) launch(folder.apps[index])
+                        val row=((e.y-box.top-55f*d+folderScrollOffset)/(91f*d)).toInt()
+                        folderTouchIndex=if (col in 0..2 && row>=0) row*3+col else -1
                         return true
                     }
                     if (e.y in 20f*d..68f*d && e.x in 22f*d..(width-22f*d)) {
@@ -505,6 +522,18 @@ class MainActivity : Activity() {
                     return true
                 }
                 MotionEvent.ACTION_MOVE -> {
+                    if (openedFolder != null) {
+                        if (abs(e.y-folderDownY)>8f*d) {
+                            folderTouchMoved=true
+                            val boxHeight=height*.59f
+                            val rows=ceil(openedFolder!!.apps.size/3.0).toInt()
+                            val visibleHeight=(boxHeight-150f*d).coerceAtLeast(0f)
+                            val maxScroll=(rows*91f*d-visibleHeight).coerceAtLeast(0f)
+                            folderScrollOffset=(folderDownOffset+folderDownY-e.y).coerceIn(0f,maxScroll)
+                        }
+                        invalidate()
+                        return true
+                    }
                     if (selected != null) {
                         val orb=selected!!
                         if (!dragging && hypot(e.x-downX,e.y-downY)>12f*d) {
@@ -545,6 +574,14 @@ class MainActivity : Activity() {
                 }
                 MotionEvent.ACTION_UP -> {
                     touchHandler.removeCallbacks(longPressAction)
+                    if (openedFolder != null) {
+                        if (!folderTouchMoved && folderTouchIndex in openedFolder!!.apps.indices) {
+                            launch(openedFolder!!.apps[folderTouchIndex])
+                        }
+                        folderTouchIndex=-1
+                        invalidate()
+                        return true
+                    }
                     selected?.let { dragged ->
                         if (dragging && deletePill.contains(e.x,e.y)) {
                             orbs.remove(dragged)
@@ -582,6 +619,11 @@ class MainActivity : Activity() {
                 }
                 MotionEvent.ACTION_CANCEL -> {
                     touchHandler.removeCallbacks(longPressAction)
+                    if (openedFolder != null) {
+                        folderTouchIndex=-1
+                        folderTouchMoved=false
+                        return true
+                    }
                     selected=null
                     dragging=false
                     moved=false
