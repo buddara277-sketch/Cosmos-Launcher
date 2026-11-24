@@ -132,58 +132,81 @@ class MainActivity : Activity() {
         }
 
         private fun drawOrb(c: Canvas, orb: Orb) {
-            // Every sphere keeps the same 58dp footprint as the former app icon.
+            // Preserve the original app artwork, framed inside a glass sphere.
             val r = orb.radius * d
             val key = if (orb.isFolder) "cosmos-folder" else orb.apps.first().packageName
             val hue = (key.hashCode().toLong().and(0x7fffffff) % 360L).toFloat()
-            val base = Color.HSVToColor(floatArrayOf(hue, .62f, .88f))
-            val deep = Color.HSVToColor(floatArrayOf(hue, .78f, .34f))
-            val light = Color.HSVToColor(floatArrayOf(hue, .34f, 1f))
+            val base = Color.HSVToColor(floatArrayOf(hue, .48f, .92f))
+            val deep = Color.HSVToColor(floatArrayOf(hue, .72f, .38f))
 
-            paint.shader = RadialGradient(
-                orb.x - r * .30f, orb.y - r * .38f, r * 1.42f,
-                intArrayOf(light, base, deep),
-                floatArrayOf(0f, .48f, 1f),
-                Shader.TileMode.CLAMP
-            )
+            val spherePath = Path().apply {
+                addCircle(orb.x, orb.y, r, Path.Direction.CW)
+            }
+            val save = c.save()
+            c.clipPath(spherePath)
+
+            // Soft colored glass tint behind and over the original icon.
             paint.style = Paint.Style.FILL
-            c.drawCircle(orb.x, orb.y, r, paint)
+            paint.shader = LinearGradient(
+                orb.x - r, orb.y - r, orb.x + r, orb.y + r,
+                intArrayOf(Color.argb(105, 255, 255, 255), Color.argb(28, base), Color.argb(105, deep)),
+                null, Shader.TileMode.CLAMP
+            )
+            c.drawRect(orb.x-r, orb.y-r, orb.x+r, orb.y+r, paint)
             paint.shader = null
+
+            if (orb.isFolder) {
+                val mini = r * .62f
+                orb.apps.take(4).forEachIndexed { i, app ->
+                    val col = i % 2
+                    val row = i / 2
+                    val cx = orb.x + (col - .5f) * mini * 1.05f
+                    val cy = orb.y - r * .10f + (row - .5f) * mini * .82f
+                    c.drawBitmap(app.icon, null, RectF(cx-mini*.48f, cy-mini*.48f, cx+mini*.48f, cy+mini*.48f), paint)
+                }
+            } else {
+                val icon = orb.apps.first().icon
+                val iconRect = RectF(orb.x-r, orb.y-r, orb.x+r, orb.y+r)
+                c.drawBitmap(icon, null, iconRect, paint)
+            }
+
+            // Dark translucent label strip keeps the app artwork visible and text readable.
+            paint.color = Color.argb(118, 5, 10, 28)
+            c.drawRect(orb.x-r, orb.y+r*.38f, orb.x+r, orb.y+r, paint)
+
+            // Subtle glass highlight.
+            paint.shader = RadialGradient(
+                orb.x - r * .34f, orb.y - r * .48f, r * .58f,
+                intArrayOf(Color.argb(105, 255, 255, 255), Color.argb(0, 255, 255, 255)),
+                null, Shader.TileMode.CLAMP
+            )
+            c.drawCircle(orb.x, orb.y, r*.96f, paint)
+            paint.shader = null
+            c.restoreToCount(save)
 
             paint.style = Paint.Style.STROKE
             paint.strokeWidth = 1.15f * d
-            paint.color = Color.argb(165, 220, 240, 255)
-            c.drawCircle(orb.x, orb.y, r - .7f * d, paint)
+            paint.color = Color.argb(190, 220, 240, 255)
+            c.drawCircle(orb.x, orb.y, r - .7f*d, paint)
             paint.style = Paint.Style.FILL
-
-            paint.shader = RadialGradient(
-                orb.x - r * .34f, orb.y - r * .48f, r * .48f,
-                intArrayOf(Color.argb(115, 255, 255, 255), Color.argb(0, 255, 255, 255)),
-                null,
-                Shader.TileMode.CLAMP
-            )
-            c.drawCircle(orb.x, orb.y, r * .94f, paint)
-            paint.shader = null
 
             val label = if (orb.isFolder) "Папка" else orb.apps.first().title
             paint.color = Color.WHITE
             paint.textAlign = Paint.Align.CENTER
             paint.typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
-            paint.setShadowLayer(2.2f * d, 0f, 1f * d, Color.argb(210, 0, 0, 0))
-            var textSize = 10f * d
-            val maxWidth = r * 1.58f
+            paint.setShadowLayer(2f*d, 0f, 1f*d, Color.BLACK)
+            var textSize = 8.5f*d
+            val maxWidth = r*1.72f
             paint.textSize = textSize
-            while (paint.measureText(label) > maxWidth && textSize > 7f * d) {
-                textSize -= .5f * d
+            while (paint.measureText(label) > maxWidth && textSize > 6f*d) {
+                textSize -= .5f*d
                 paint.textSize = textSize
             }
             val fitted = if (paint.measureText(label) > maxWidth) {
-                val available = paint.breakText(label, true, maxWidth - 5f * d, null)
+                val available = paint.breakText(label, true, maxWidth-4f*d, null)
                 label.take(available.coerceAtLeast(1)).trimEnd() + "…"
             } else label
-            val metrics = paint.fontMetrics
-            val baseline = orb.y - (metrics.ascent + metrics.descent) / 2f
-            c.drawText(fitted, orb.x, baseline, paint)
+            c.drawText(fitted, orb.x, orb.y+r*.78f, paint)
             paint.clearShadowLayer()
             paint.typeface = Typeface.DEFAULT
         }
