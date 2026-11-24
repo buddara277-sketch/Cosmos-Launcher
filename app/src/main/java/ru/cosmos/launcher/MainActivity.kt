@@ -481,7 +481,7 @@ class MainActivity : Activity() {
         private fun openGoogleSearch() {
             val input = EditText(this@MainActivity).apply {
                 hint = "Что ищем в Google?"
-                singleLine = true
+                setSingleLine(true)
                 textSize = 16f
                 setPadding((16f*d).toInt(), (12f*d).toInt(), (16f*d).toInt(), (12f*d).toInt())
                 imeOptions = EditorInfo.IME_ACTION_SEARCH
