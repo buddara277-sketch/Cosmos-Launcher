@@ -1089,24 +1089,21 @@ class MainActivity : Activity() {
 
         private fun drawOpenFolder(c: Canvas, folder: Orb) {
             paint.style = Paint.Style.FILL
-            paint.color = Color.argb(205, 2, 6, 22)
+            // Dim the desktop behind the folder, but keep the folder itself opaque:
+            // no frosted-glass/translucent layer over app artwork.
+            paint.color = Color.argb(220, 2, 6, 22)
             c.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
             val box = RectF(18f*d, height*.17f, width-18f*d, height*.80f)
-            paint.setShadowLayer(28f*d, 0f, 8f*d, Color.argb(115, 65, 145, 255))
-            paint.shader = LinearGradient(box.left, box.top, box.right, box.bottom,
-                intArrayOf(Color.argb(242, 34, 57, 96), Color.argb(238, 10, 22, 49), Color.argb(245, 24, 39, 76)),
-                null, Shader.TileMode.CLAMP)
-            c.drawRoundRect(box, 30f*d, 30f*d, paint)
+            paint.setShadowLayer(22f*d, 0f, 7f*d, Color.argb(95, 65, 145, 255))
             paint.shader = null
+            paint.color = Color.rgb(12, 27, 56)
+            c.drawRoundRect(box, 30f*d, 30f*d, paint)
             paint.clearShadowLayer()
             paint.style = Paint.Style.STROKE
             paint.strokeWidth = 1.2f*d
             paint.color = Color.argb(155, 190, 225, 255)
             c.drawRoundRect(box, 30f*d, 30f*d, paint)
             paint.style = Paint.Style.FILL
-            paint.shader = LinearGradient(box.left, box.top, box.right, box.top+100f*d,
-                intArrayOf(Color.argb(48,255,255,255), Color.TRANSPARENT), null, Shader.TileMode.CLAMP)
-            c.drawRoundRect(box, 30f*d, 30f*d, paint)
             paint.shader = null
 
             paint.color = Color.WHITE
@@ -1132,7 +1129,7 @@ class MainActivity : Activity() {
                 val cy=box.top+105f*d+row*94f*d-folderScrollOffset
                 if (cy > box.top+66f*d && cy < box.bottom-32f*d) {
                     val tile = RectF(cx-31f*d, cy-31f*d, cx+31f*d, cy+31f*d)
-                    paint.color = Color.argb(72, 150, 190, 245)
+                    paint.color = Color.argb(38, 150, 190, 245)
                     c.drawRoundRect(tile, 17f*d, 17f*d, paint)
                     paint.style = Paint.Style.STROKE
                     paint.strokeWidth = .8f*d
@@ -1198,18 +1195,24 @@ class MainActivity : Activity() {
         }
 
         private fun launch(app: AppEntry) {
-            if (app.launchUrl != null) {
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(app.launchUrl)))
-            } else if (app.launchIntent != null) {
-                try {
-                    startActivity(Intent(app.launchIntent).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                } catch (_: Exception) { }
-            } else {
-                packageManager.getLaunchIntentForPackage(app.packageName)?.let { intent ->
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
-                    startActivity(intent)
-                }
-            }
+            // Use one launch path for shortcuts, system intents and browser bookmarks.
+            // This avoids different task-stack behaviour depending on how an app was discovered.
+            val intent = when {
+                app.launchUrl != null ->
+                    Intent(Intent.ACTION_VIEW, Uri.parse(app.launchUrl))
+                app.launchIntent != null ->
+                    Intent(app.launchIntent)
+                else ->
+                    packageManager.getLaunchIntentForPackage(app.packageName)
+            } ?: return
+            try {
+                intent.addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_CLEAR_TASK or
+                        Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+                )
+                startActivity(intent)
+            } catch (_: Exception) { }
         }
 
         fun closeFolderOnBack(): Boolean {
