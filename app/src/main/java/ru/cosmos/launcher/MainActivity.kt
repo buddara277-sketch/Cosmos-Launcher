@@ -1265,7 +1265,7 @@ class MainActivity : Activity() {
                 MotionEvent.ACTION_MOVE -> {
                     // Page swipes have priority over orb selection. This allows
                     // switching desktops even when the finger starts on a moving sphere.
-                    if (openedFolder == null && !swipeHandled &&
+                    if (openedFolder == null && !dragging && !swipeHandled &&
                         abs(e.x - downX) > 55f*d && abs(e.x - downX) > abs(e.y - downY)) {
                         touchHandler.removeCallbacks(longPressAction)
                         selected = null
